@@ -1,0 +1,11 @@
+site_name: napari-affinities
+site_description: A plugin for creating, visualizing, and processing affinities
+site_author: William Patton
+
+theme: readthedocs
+
+
+repo_url: https://github.com/pattonw/napari-affinities
+
+pages:
+- Home: index.md
