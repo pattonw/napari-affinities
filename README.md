@@ -34,6 +34,10 @@ To install latest development version :
     pip install git+https://github.com/pattonw/napari-affinities.git
 
 
+conda install -c conda-forge affogato
+pip install -r requirements.txt
+
+
 ## Contributing
 
 Contributions are very welcome. Tests can be run with [tox], please ensure
