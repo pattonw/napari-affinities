@@ -37,6 +37,10 @@ To install latest development version :
 conda install -c conda-forge affogato
 pip install -r requirements.txt
 
+Download example model:
+[epithelial example model](https://oc.embl.de/index.php/s/zfWMKu7HoQnSJLs)
+Place the downloaded zip file in "sample_data/models"
+
 
 ## Contributing
 
