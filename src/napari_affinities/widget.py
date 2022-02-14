@@ -1,14 +1,16 @@
 from magicgui import magic_factory
 import napari
 
-from affogato.segmentation.mws import compute_mws_segmentation_from_affinities
+from affogato.segmentation import MWSGridGraph, compute_mws_clustering
 
 import bioimageio.core
 from bioimageio.core.prediction_pipeline import create_prediction_pipeline
 
+import numpy as np
 from xarray import DataArray
 
 from pathlib import Path
+from typing import Optional
 
 
 @magic_factory
@@ -64,18 +66,64 @@ def predict_affinities_widget(
 @magic_factory
 def mutex_watershed_widget(
     affinities: napari.layers.Image,
-    # seeds: napari.layers.Labels,
+    seeds: Optional[napari.layers.Labels],
+    mask: Optional[napari.layers.Labels],
+    previous_segmentation: Optional[napari.layers.Labels],
 ) -> napari.layers.Labels:
+    # Assumptions:
     # Affinities must come with "offsets" in its metadata.
+    assert "offsets" in affinities.metadata
+    # seeds and mask must be same size as affinities if provided
+    shape = affinities.data.shape[1:]
+    if seeds is not None:
+        assert seeds.data.shape[0] == 1, "Seeds should only have 1 channel but has multiple!"
+        assert (
+            shape == seeds.data.shape[1:]
+        ), f"Got shape {seeds.data.shape[1:]} for seeds but expected {shape}"
+        seeds = seeds.data
+    if mask is not None:
+        assert mask.data.shape[0] == 1, "Mask should only have 1 channel but has multiple!"
+        assert (
+            shape == mask.data.shape[1:]
+        ), f"Got shape {seeds.data.shape} for mask but expected {shape}"
 
-    # TODO: why must the affinity data be inverted? Constantine model wierdness
+    # if a previous segmentation is provided, it must have a "grid graph"
+    # in its metadata.
 
-    segmentation = compute_mws_segmentation_from_affinities(
-        1 - affinities.data,
-        affinities.metadata["offsets"],
-        beta_parameter=0.5,
-        foreground_mask=None,
-        edge_mask=None,
-        return_valid_edge_mask=False,
+    grid_graph = None
+    if previous_segmentation is not None:
+        grid_graph = previous_segmentation.metadata["grid_graph"]
+    if grid_graph is None:
+        grid_graph = MWSGridGraph(shape)
+        if mask is not None:
+            grid_graph.set_mask(mask.data)
+        if seeds is not None:
+            grid_graph.update_seeds(seeds.data)
+
+    offsets = affinities.metadata["offsets"]
+    ndim = len(offsets[0])
+
+    grid_graph.add_attractive_seed_edges = True
+    uvs, weights = grid_graph.compute_nh_and_weights(
+        1.0 - np.require(affinities.data[:ndim], requirements="C"), offsets[:ndim]
     )
+
+    grid_graph.add_attractive_seed_edges = False
+    mutex_uvs, mutex_weights = grid_graph.compute_nh_and_weights(
+        np.require(affinities.data[ndim:], requirements="C"),
+        offsets[ndim:],
+        [1] * ndim,
+        randomize_strides=False,
+    )
+
+    # compute the segmentation
+    n_nodes = grid_graph.n_nodes
+    segmentation = compute_mws_clustering(
+        n_nodes, uvs, mutex_uvs, weights, mutex_weights
+    )
+    grid_graph.relabel_to_seeds(segmentation)
+    segmentation = segmentation.reshape(shape)
+    if mask is not None:
+        segmentation[np.logical_not(mask)] = 0
+
     return napari.layers.Labels(segmentation, name="Segmentation")
