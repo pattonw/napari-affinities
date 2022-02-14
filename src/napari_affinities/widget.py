@@ -26,7 +26,8 @@ def train_affinities_widget(
 @magic_factory
 def predict_affinities_widget(
     model: str,
-    raw: napari.layers.Image,
+    raw: napari.types.ImageData,
+    affinities: Optional[napari.layers.Image],
 ) -> napari.types.LayerDataTuple:
     model = Path("sample_data/models/EpitheliaAffinityModel.zip")
     model = bioimageio.core.load_resource_description(model)
@@ -39,7 +40,8 @@ def predict_affinities_widget(
     # plugin will fail.
     # TODO: How to determine axes of raw data. metadata?
     # guess? simply make it fit what the model expects?
-    raw = raw.data
+
+    # add batch dimension
     raw = raw.reshape((1, *raw.shape))
 
     with create_prediction_pipeline(bioimageio_model=model) as pp:
@@ -60,7 +62,14 @@ def predict_affinities_widget(
     )
 
     # Generate affinities and keep the offsets as metadata
-    return (affs, {"name": "Affinities", "metadata": {"offsets": offsets}}, "image")
+    return (
+        affs,
+        {
+            "name": "Affinities" if affinities is None else affinities.name,
+            "metadata": {"offsets": offsets},
+        },
+        "image",
+    )
 
 
 @magic_factory
@@ -130,4 +139,11 @@ def mutex_watershed_widget(
     if mask is not None:
         segmentation[np.logical_not(mask)] = 0
 
-    return (segmentation, {"name": "Segmentation"})
+    return (
+        segmentation,
+        {
+            "name": "Segmentation"
+            if previous_segmentation is None
+            else previous_segmentation.name
+        },
+    )
