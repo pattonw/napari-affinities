@@ -27,7 +27,7 @@ def train_affinities_widget(
 def predict_affinities_widget(
     model: str,
     raw: napari.layers.Image,
-) -> napari.layers.Image:
+) -> napari.types.LayerDataTuple:
     model = Path("sample_data/models/EpitheliaAffinityModel.zip")
     model = bioimageio.core.load_resource_description(model)
 
@@ -60,7 +60,7 @@ def predict_affinities_widget(
     )
 
     # Generate affinities and keep the offsets as metadata
-    return napari.layers.Image(affs, name="Affinities", metadata={"offsets": offsets})
+    return (affs, {"name": "Affinities", "metadata": {"offsets": offsets}}, "image")
 
 
 @magic_factory
@@ -69,20 +69,24 @@ def mutex_watershed_widget(
     seeds: Optional[napari.layers.Labels],
     mask: Optional[napari.layers.Labels],
     previous_segmentation: Optional[napari.layers.Labels],
-) -> napari.layers.Labels:
+) -> napari.types.LayerDataTuple:
     # Assumptions:
     # Affinities must come with "offsets" in its metadata.
-    assert "offsets" in affinities.metadata
+    assert "offsets" in affinities.metadata, f"{affinities.metadata}"
     # seeds and mask must be same size as affinities if provided
     shape = affinities.data.shape[1:]
     if seeds is not None:
-        assert seeds.data.shape[0] == 1, "Seeds should only have 1 channel but has multiple!"
+        assert (
+            seeds.data.shape[0] == 1
+        ), "Seeds should only have 1 channel but has multiple!"
         assert (
             shape == seeds.data.shape[1:]
         ), f"Got shape {seeds.data.shape[1:]} for seeds but expected {shape}"
         seeds = seeds.data
     if mask is not None:
-        assert mask.data.shape[0] == 1, "Mask should only have 1 channel but has multiple!"
+        assert (
+            mask.data.shape[0] == 1
+        ), "Mask should only have 1 channel but has multiple!"
         assert (
             shape == mask.data.shape[1:]
         ), f"Got shape {seeds.data.shape} for mask but expected {shape}"
@@ -126,4 +130,4 @@ def mutex_watershed_widget(
     if mask is not None:
         segmentation[np.logical_not(mask)] = 0
 
-    return napari.layers.Labels(segmentation, name="Segmentation")
+    return (segmentation, {"name": "Segmentation"})
