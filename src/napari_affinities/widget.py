@@ -12,6 +12,72 @@ from xarray import DataArray
 from pathlib import Path
 from typing import Optional
 
+from qtpy.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QPushButton,
+    QFileDialog,
+    QInputDialog,
+    QLineEdit,
+    QLabel,
+)
+from napari_plugin_engine import napari_hook_implementation
+
+
+class ModelWidget(QWidget):
+    def __init__(self, napari_viewer):
+        self.viewer = napari_viewer
+        super().__init__()
+
+        # No model loaded by default.
+        self.__model = None
+
+        # initialize layout
+        layout = QVBoxLayout()
+
+        # Loaded model name
+        self.model_label = QLabel("None")
+        layout.addWidget(self.model_label)
+
+        # Load model from file
+        model_file_loader = QPushButton("Load a model from File!", self)
+        model_file_loader.clicked.connect(self.model_from_file)
+        layout.addWidget(model_file_loader)
+
+        # Load model from url
+        self.model_url_loader = QLineEdit("Load a model from Url!", self)
+        self.model_url_loader.returnPressed.connect(self.model_from_url)
+        layout.addWidget(self.model_url_loader)
+
+        # activate layout
+        self.setLayout(layout)
+
+    @property
+    def model(self) -> bioimageio.core.resource_io.io_.ResourceDescription:
+        return self.__model
+
+    @model.setter
+    def model(self, new_model: bioimageio.core.resource_io.io_.ResourceDescription):
+        self.__model = new_model
+        self.model_label.setText(new_model.name)
+
+    def model_from_file(self):
+        dlg = QFileDialog()
+        dlg.setFileMode(QFileDialog.FileMode.ExistingFile)
+        dlg.setNameFilters(["zip files (*.zip)"])
+        dlg.selectNameFilter("zip files (*.zip)")
+
+        if dlg.exec_():
+            filenames = dlg.selectedFiles()
+            model_file = Path(filenames[0])
+
+            self.model = bioimageio.core.load_resource_description(model_file)
+
+    def model_from_url(self):
+        self.model = bioimageio.core.load_resource_description(
+            self.model_url_loader.text()
+        )
+
 
 @magic_factory
 def train_affinities_widget(
@@ -79,6 +145,12 @@ def mutex_watershed_widget(
     mask: Optional[napari.layers.Labels],
     previous_segmentation: Optional[napari.layers.Labels],
 ) -> napari.types.LayerDataTuple:
+
+    # TODO:
+    # beta slider
+    # live update checkbox
+    # invert affinities checkbox
+
     # Assumptions:
     # Affinities must come with "offsets" in its metadata.
     assert "offsets" in affinities.metadata, f"{affinities.metadata}"

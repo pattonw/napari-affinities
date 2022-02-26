@@ -20,6 +20,9 @@ contributions:
     - id: napari-affinities.make_mutex_watershed_widget
       python_name: napari_affinities.widget:mutex_watershed_widget
       title: Make mutex watershed widget
+    - id: napari-affinities.make_experiment_widget
+      python_name: napari_affinities.widget:ModelWidget
+      title: Make experiment widget
     - id: napari-affinities.sample_epithelial_raw
       python_name: napari_affinities.sample_data:sample_epithelial_raw
       title: Load sample data from napari Affinities
@@ -69,3 +72,5 @@ contributions:
       display_name: Predict Affinities Widget
     - command: napari-affinities.make_mutex_watershed_widget
       display_name: Mutex Watershed Widget
+    - command: napari-affinities.make_experiment_widget
+      display_name: Experiment Widget
