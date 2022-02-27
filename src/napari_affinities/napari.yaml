@@ -11,18 +11,12 @@ contributions:
     - id: napari-affinities.write_single_image
       python_name: napari_affinities._writer:write_single_image
       title: Save image data with napari Affinities
-    - id: napari-affinities.make_train_affinities_widget
-      python_name: napari_affinities.widget:train_affinities_widget
-      title: Make train affinities widget
-    - id: napari-affinities.make_predict_affinities_widget
-      python_name: napari_affinities.widget:predict_affinities_widget
-      title: Make predict affinities widget
     - id: napari-affinities.make_mutex_watershed_widget
       python_name: napari_affinities.widget:mutex_watershed_widget
       title: Make mutex watershed widget
-    - id: napari-affinities.make_experiment_widget
+    - id: napari-affinities.make_affinities_widget
       python_name: napari_affinities.widget:ModelWidget
-      title: Make experiment widget
+      title: Make model widget
     - id: napari-affinities.sample_epithelial_raw
       python_name: napari_affinities.sample_data:sample_epithelial_raw
       title: Load sample data from napari Affinities
@@ -66,11 +60,7 @@ contributions:
       display_name: Epithelial fgbg
       key: epithelial_fgbg.1
   widgets:
-    - command: napari-affinities.make_train_affinities_widget
-      display_name: Train Affinities Widget
-    - command: napari-affinities.make_predict_affinities_widget
-      display_name: Predict Affinities Widget
     - command: napari-affinities.make_mutex_watershed_widget
       display_name: Mutex Watershed Widget
-    - command: napari-affinities.make_experiment_widget
-      display_name: Experiment Widget
+    - command: napari-affinities.make_affinities_widget
+      display_name: Affinities Widget

@@ -1,4 +1,6 @@
-from magicgui import magic_factory
+from operator import invert
+from magicgui import magic_factory, magicgui
+from magicgui.widgets import create_widget
 import napari
 
 from affogato.segmentation import MWSGridGraph, compute_mws_clustering
@@ -12,6 +14,7 @@ from xarray import DataArray
 from pathlib import Path
 from typing import Optional
 
+from superqt import QCollapsible
 from qtpy.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -26,40 +29,78 @@ from napari_plugin_engine import napari_hook_implementation
 
 class ModelWidget(QWidget):
     def __init__(self, napari_viewer):
+        # basic initialization
         self.viewer = napari_viewer
         super().__init__()
 
-        # No model loaded by default.
-        self.__model = None
-
-        # initialize layout
+        # Widget layout
         layout = QVBoxLayout()
 
-        # Loaded model name
-        self.model_label = QLabel("None")
+        # Model name Label Widget
+        self.model_label = QLabel()
         layout.addWidget(self.model_label)
 
-        # Load model from file
+        # Load model from file Widget
         model_file_loader = QPushButton("Load a model from File!", self)
         model_file_loader.clicked.connect(self.model_from_file)
         layout.addWidget(model_file_loader)
 
-        # Load model from url
-        self.model_url_loader = QLineEdit("Load a model from Url!", self)
-        self.model_url_loader.returnPressed.connect(self.model_from_url)
-        layout.addWidget(self.model_url_loader)
+        # Load model from url Widget
+        model_url_loader = QPushButton("Load a model from Url!", self)
+        model_url_loader.clicked.connect(self.model_from_url)
+        layout.addWidget(model_url_loader)
+
+        # Train widget(Collapsable), use magicgui to avoid having to make layer dropdowns myself
+        # Magicgui can't update layer dropdowns automatically anymore so add event listener
+        collapsable_train_widget = QCollapsible("Training: expand for options:", self)
+        train_widget = magicgui(
+            train_affinities_widget,
+            call_button="Train Affinities",
+            parent={"bind": self},
+        )
+        train_widget.raw.reset_choices()
+        napari_viewer.layers.events.inserted.connect(train_widget.raw.reset_choices)
+        collapsable_train_widget.addWidget(
+            train_widget.native
+        )  # FunctionGui -> QWidget via .native
+        layout.addWidget(collapsable_train_widget)
+
+        # Predict widget(Collapsable), use magicgui to avoid having to make layer dropdowns myself
+        # Magicgui can't update layer dropdowns automatically anymore so add event listener
+        collapsable_predict_widget = QCollapsible(
+            "Prediction: expand for options:", self
+        )
+        predict_widget = magicgui(
+            predict_affinities_widget,
+            call_button="Predict Affinities",
+            parent={"bind": self},
+        )
+        predict_widget.raw.reset_choices()
+        napari_viewer.layers.events.inserted.connect(predict_widget.raw.reset_choices)
+        collapsable_predict_widget.addWidget(
+            predict_widget.native
+        )  # FunctionGui -> QWidget via .native
+        layout.addWidget(collapsable_predict_widget)
 
         # activate layout
         self.setLayout(layout)
 
+        # Widget state
+        self.model = None
+
     @property
-    def model(self) -> bioimageio.core.resource_io.io_.ResourceDescription:
+    def model(self) -> Optional[bioimageio.core.resource_io.io_.ResourceDescription]:
         return self.__model
 
     @model.setter
-    def model(self, new_model: bioimageio.core.resource_io.io_.ResourceDescription):
+    def model(
+        self, new_model: Optional[bioimageio.core.resource_io.io_.ResourceDescription]
+    ):
         self.__model = new_model
-        self.model_label.setText(new_model.name)
+        if new_model is not None:
+            self.model_label.setText(new_model.name)
+        else:
+            self.model_label.setText("None")
 
     def model_from_file(self):
         dlg = QFileDialog()
@@ -74,14 +115,15 @@ class ModelWidget(QWidget):
             self.model = bioimageio.core.load_resource_description(model_file)
 
     def model_from_url(self):
-        self.model = bioimageio.core.load_resource_description(
-            self.model_url_loader.text()
-        )
+        dlg = QInputDialog()
+        dlg.setLabelText("Url for model zip folder:")
+        if dlg.exec_():
+            url = dlg.getText()
+            self.model = bioimageio.core.load_resource_description(url)
 
 
-@magic_factory
 def train_affinities_widget(
-    model: str,
+    parent: QWidget,
     raw: napari.layers.Image,
     gt: napari.layers.Labels,
     lsds: bool = False,
@@ -89,14 +131,12 @@ def train_affinities_widget(
     pass
 
 
-@magic_factory
 def predict_affinities_widget(
-    model: str,
+    parent: QWidget,
     raw: napari.types.ImageData,
-    affinities: Optional[napari.layers.Image],
 ) -> napari.types.LayerDataTuple:
-    model = Path("sample_data/models/EpitheliaAffinityModel.zip")
-    model = bioimageio.core.load_resource_description(model)
+
+    model = parent.model
 
     offsets = model.config["mws"]["offsets"]
     ndim = len(offsets[0])
@@ -131,7 +171,7 @@ def predict_affinities_widget(
     return (
         affs,
         {
-            "name": "Affinities" if affinities is None else affinities.name,
+            "name": "Affinities",
             "metadata": {"offsets": offsets},
         },
         "image",
@@ -143,13 +183,12 @@ def mutex_watershed_widget(
     affinities: napari.layers.Image,
     seeds: Optional[napari.layers.Labels],
     mask: Optional[napari.layers.Labels],
-    previous_segmentation: Optional[napari.layers.Labels],
+    invert_affinities: bool,
 ) -> napari.types.LayerDataTuple:
 
     # TODO:
     # beta slider
     # live update checkbox
-    # invert affinities checkbox
 
     # Assumptions:
     # Affinities must come with "offsets" in its metadata.
@@ -174,24 +213,19 @@ def mutex_watershed_widget(
 
     # if a previous segmentation is provided, it must have a "grid graph"
     # in its metadata.
-
-    grid_graph = None
-    if previous_segmentation is not None:
-        grid_graph = previous_segmentation.metadata["grid_graph"]
-    if grid_graph is None:
-        grid_graph = MWSGridGraph(shape)
-        if mask is not None:
-            grid_graph.set_mask(mask.data)
-        if seeds is not None:
-            grid_graph.update_seeds(seeds.data)
+    grid_graph = MWSGridGraph(shape)
+    if mask is not None:
+        grid_graph.set_mask(mask.data)
+    if seeds is not None:
+        grid_graph.update_seeds(seeds.data)
 
     offsets = affinities.metadata["offsets"]
     ndim = len(offsets[0])
 
     grid_graph.add_attractive_seed_edges = True
-    uvs, weights = grid_graph.compute_nh_and_weights(
-        1.0 - np.require(affinities.data[:ndim], requirements="C"), offsets[:ndim]
-    )
+    affs = np.require(affinities.data[:ndim], requirements="C")
+    affs = 1 - affs if invert_affinities else affs
+    uvs, weights = grid_graph.compute_nh_and_weights(affs, offsets[:ndim])
 
     grid_graph.add_attractive_seed_edges = False
     mutex_uvs, mutex_weights = grid_graph.compute_nh_and_weights(
@@ -213,9 +247,5 @@ def mutex_watershed_widget(
 
     return (
         segmentation,
-        {
-            "name": "Segmentation"
-            if previous_segmentation is None
-            else previous_segmentation.name
-        },
+        {"name": "Segmentation"},
     )
