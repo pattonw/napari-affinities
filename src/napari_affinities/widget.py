@@ -211,10 +211,12 @@ def mutex_watershed_widget(
     mask: Optional[napari.layers.Labels],
     invert_affinities: bool,
 ) -> napari.types.LayerDataTuple:
+    # TODO: Add Keybindings
 
     # TODO:
     # beta slider
-    # live update checkbox
+    # live update checkbox (simple layer onchange eventlistener similar to
+    # the layer dropdown choice reloader on the model widget)
 
     # Assumptions:
     # Affinities must come with "offsets" in its metadata.
