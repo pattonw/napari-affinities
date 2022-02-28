@@ -115,10 +115,10 @@ class ModelWidget(QWidget):
             self.model = bioimageio.core.load_resource_description(model_file)
 
     def model_from_url(self):
-        dlg = QInputDialog()
-        dlg.setLabelText("Url for model zip folder:")
-        if dlg.exec_():
-            url = dlg.getText()
+        url, ok = QInputDialog.getText(
+            self, "Url Input Dialog", "Url for model rdf.yaml folder:"
+        )
+        if ok:
             self.model = bioimageio.core.load_resource_description(url)
 
 
