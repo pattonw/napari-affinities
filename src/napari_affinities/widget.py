@@ -115,6 +115,7 @@ class ModelWidget(QWidget):
             self.model = bioimageio.core.load_resource_description(model_file)
 
     def model_from_url(self):
+        # TODO: async
         url, ok = QInputDialog.getText(
             self, "Url Input Dialog", "Url for model rdf.yaml folder:"
         )
