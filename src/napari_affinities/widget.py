@@ -1,12 +1,13 @@
-from operator import invert
 from magicgui import magic_factory, magicgui
-from magicgui.widgets import create_widget
 import napari
 
 from affogato.segmentation import MWSGridGraph, compute_mws_clustering
 
 import bioimageio.core
+from bioimageio.core.resource_io.nodes import Model, ImportedSource
 from bioimageio.core.prediction_pipeline import create_prediction_pipeline
+
+from marshmallow import missing
 
 import numpy as np
 from xarray import DataArray
@@ -21,7 +22,6 @@ from qtpy.QtWidgets import (
     QPushButton,
     QFileDialog,
     QInputDialog,
-    QLineEdit,
     QLabel,
 )
 from napari_plugin_engine import napari_hook_implementation
@@ -89,12 +89,12 @@ class ModelWidget(QWidget):
         self.model = None
 
     @property
-    def model(self) -> Optional[bioimageio.core.resource_io.io_.ResourceDescription]:
+    def model(self) -> Optional[Model]:
         return self.__model
 
     @model.setter
     def model(
-        self, new_model: Optional[bioimageio.core.resource_io.io_.ResourceDescription]
+        self, new_model: Optional[Model]
     ):
         self.__model = new_model
         if new_model is not None:
@@ -123,13 +123,38 @@ class ModelWidget(QWidget):
             self.model = bioimageio.core.load_resource_description(url)
 
 
+def get_nn_instance(model_node: Model, **kwargs):
+    """
+    Get python torch model from a bioimage.io `Model` class
+    copied from:
+    https://github.com/bioimage-io/core-bioimage-io-python/blob/3364875eec581b5cd5950441915aa00219bbaf18/
+    bioimageio/core/prediction_pipeline/_model_adapters/_pytorch_model_adapter.py#L54
+    """
+    # TODO: This is torch specific. Bioimage-io models support many more
+    # model frameworks. How to handle non-torch models still needs to be
+    # handled
+    # Most notebooks/code I could find related to loading a bioimage-io model
+    # worked under the assumption that you knew what model, and thus what
+    # framework you would be using
+
+    weight_spec = model_node.weights.get("pytorch_state_dict")
+    assert weight_spec is not None
+    assert isinstance(weight_spec.architecture, ImportedSource)
+    model_kwargs = weight_spec.kwargs
+    joined_kwargs = {} if model_kwargs is missing else dict(model_kwargs)
+    joined_kwargs.update(kwargs)
+    return weight_spec.architecture(**joined_kwargs)
+
 def train_affinities_widget(
     parent: QWidget,
     raw: napari.layers.Image,
     gt: napari.layers.Labels,
     lsds: bool = False,
 ):
-    pass
+    model = parent.model
+    torch_model = get_nn_instance(model)
+    print(torch_model)
+
 
 
 def predict_affinities_widget(
