@@ -2,23 +2,36 @@ import zarr
 
 EPITHELIAL_ZARR = "sample_data/per01_100.zarr"
 
-def sample_epithelial_raw():
-    container = zarr.open(EPITHELIAL_ZARR, "r")
-    return [(container["volumes/raw"][:],)]
 
-def sample_epithelial_affinities():
+def sample_epithelial():
     container = zarr.open(EPITHELIAL_ZARR, "r")
-    return [(container["volumes/gt_affs"][:],)]
-
-def sample_epithelial_labels():
-    container = zarr.open(EPITHELIAL_ZARR, "r")
-    return [(container["volumes/gt_labels"][:],)]
-
-def sample_epithelial_tanh():
-    container = zarr.open(EPITHELIAL_ZARR, "r")
-    return [(container["volumes/gt_tanh"][:],)]
-
-def sample_epithelial_fgbg():
-    container = zarr.open(EPITHELIAL_ZARR, "r")
-    return [(container["volumes/gt_fgbg"][:],)]
-    
+    return [
+        (
+            container["volumes/raw"][:],
+            {
+                "name": "Raw",
+            },
+            "image",
+        ),
+        (
+            container["volumes/gt_labels"][:],
+            {
+                "name": "Labels",
+            },
+            "labels",
+        ),
+        (
+            container["volumes/gt_tanh"][:],
+            {
+                "name": "TanH",
+            },
+            "image",
+        ),
+        (
+            container["volumes/gt_fgbg"][:],
+            {
+                "name": "FG/BG",
+            },
+            "labels",
+        ),
+    ]

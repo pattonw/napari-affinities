@@ -17,20 +17,8 @@ contributions:
     - id: napari-affinities.make_affinities_widget
       python_name: napari_affinities.widget:ModelWidget
       title: Make model widget
-    - id: napari-affinities.sample_epithelial_raw
-      python_name: napari_affinities.sample_data:sample_epithelial_raw
-      title: Load sample data from napari Affinities
-    - id: napari-affinities.sample_epithelial_affinities
-      python_name: napari_affinities.sample_data:sample_epithelial_affinities
-      title: Load sample data from napari Affinities
-    - id: napari-affinities.sample_epithelial_labels
-      python_name: napari_affinities.sample_data:sample_epithelial_labels
-      title: Load sample data from napari Affinities
-    - id: napari-affinities.sample_epithelial_tanh
-      python_name: napari_affinities.sample_data:sample_epithelial_tanh
-      title: Load sample data from napari Affinities
-    - id: napari-affinities.sample_epithelial_fgbg
-      python_name: napari_affinities.sample_data:sample_epithelial_fgbg
+    - id: napari-affinities.sample_epithelial
+      python_name: napari_affinities.sample_data:sample_epithelial
       title: Load sample data from napari Affinities
   readers:
     - command: napari-affinities.get_reader
@@ -44,21 +32,9 @@ contributions:
       layer_types: ['image']
       filename_extensions: ['.npy'] 
   sample_data:
-    - command: napari-affinities.sample_epithelial_raw
-      display_name: Epithelial raw
-      key: epithelial_raw.1
-    - command: napari-affinities.sample_epithelial_affinities
-      display_name: Epithelial affinities
-      key: epithelial_affinities.1
-    - command: napari-affinities.sample_epithelial_labels
-      display_name: Epithelial labels
-      key: epithelial_labels.1
-    - command: napari-affinities.sample_epithelial_tanh
-      display_name: Epithelial tanh
-      key: epithelial_tanh.1
-    - command: napari-affinities.sample_epithelial_fgbg
-      display_name: Epithelial fgbg
-      key: epithelial_fgbg.1
+    - command: napari-affinities.sample_epithelial
+      display_name: Epithelial sample
+      key: epithelial_sample.0
   widgets:
     - command: napari-affinities.make_mutex_watershed_widget
       display_name: Mutex Watershed Widget
