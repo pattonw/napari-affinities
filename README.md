@@ -35,6 +35,7 @@ To install latest development version :
 
 
 conda install -c conda-forge affogato
+pip install cython (this must be installed before the requirements.txt)
 pip install -r requirements.txt
 
 Download example model:
