@@ -8,4 +8,14 @@ pytest
 pytest-qt
 npe2
 magicgui
+gunpowder
+pip install git+git://github.com/funkelab/lsd.git
 -e .
+
+# Dependencies of dependencies
+cython  # lsd
+mahotas  # lsd
+matplotlib  # lsd
+pip install git+git://github.com/funkelab/funlib.segment.git  # lsd
+pip install daisy  # lsd
+pip install git+git://github.com/funkey/waterz.git  # lsd
