@@ -1,20 +1,19 @@
+from .gp import NapariImageSource, NapariLabelsSource, OnesSource
+
 from magicgui import magic_factory, magicgui
 import napari
 
+import gunpowder as gp
 from affogato.segmentation import MWSGridGraph, compute_mws_clustering
-
+from lsd.gp import AddLocalShapeDescriptor
 import bioimageio.core
 from bioimageio.core.resource_io.nodes import Model, ImportedSource
 from bioimageio.core.prediction_pipeline import create_prediction_pipeline
 
 from marshmallow import missing
-
+import torch
 import numpy as np
 from xarray import DataArray
-
-from pathlib import Path
-from typing import Optional
-
 from superqt import QCollapsible
 from qtpy.QtWidgets import (
     QWidget,
@@ -24,7 +23,10 @@ from qtpy.QtWidgets import (
     QInputDialog,
     QLabel,
 )
-from napari_plugin_engine import napari_hook_implementation
+
+
+from pathlib import Path
+from typing import Optional
 
 
 class ModelWidget(QWidget):
@@ -60,6 +62,10 @@ class ModelWidget(QWidget):
         )
         train_widget.raw.reset_choices()
         napari_viewer.layers.events.inserted.connect(train_widget.raw.reset_choices)
+        train_widget.gt.reset_choices()
+        napari_viewer.layers.events.inserted.connect(train_widget.gt.reset_choices)
+        train_widget.mask.reset_choices()
+        napari_viewer.layers.events.inserted.connect(train_widget.mask.reset_choices)
         collapsable_train_widget.addWidget(
             train_widget.native
         )  # FunctionGui -> QWidget via .native
@@ -93,9 +99,7 @@ class ModelWidget(QWidget):
         return self.__model
 
     @model.setter
-    def model(
-        self, new_model: Optional[Model]
-    ):
+    def model(self, new_model: Optional[Model]):
         self.__model = new_model
         if new_model is not None:
             self.model_label.setText(new_model.name)
@@ -145,16 +149,167 @@ def get_nn_instance(model_node: Model, **kwargs):
     joined_kwargs.update(kwargs)
     return weight_spec.architecture(**joined_kwargs)
 
+
 def train_affinities_widget(
     parent: QWidget,
     raw: napari.layers.Image,
     gt: napari.layers.Labels,
+    mask: Optional[napari.layers.Labels] = None,
     lsds: bool = False,
-):
+    num_iterations: int = 1000,
+) -> napari.types.LayerDataTuple:
+    # get currently loaded model
     model = parent.model
-    torch_model = get_nn_instance(model)
-    print(torch_model)
+    if model is None:
+        raise ValueError("Please load a model either from your filesystem or a url")
 
+    # Get necessary metadata:
+    offsets = model.config["mws"]["offsets"]
+    snapshot_interval = None
+    num_cpu_processes = 1
+    batch_size = 1
+    input_shape = (100, 100)  # TODO: read from metadata
+    output_shape = (100, 100)  # TODO: read from metadata
+
+    # extract torch model from bioimageio format
+    torch_model = get_nn_instance(model)
+
+    # define Loss function and Optimizer TODO: make options available as choices?
+    loss_func = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(params=torch_model.parameters())
+
+    ##############################################################################
+    ########################## Create Training Pipeline ##########################
+    ##############################################################################
+
+    # define shapes:
+    input_shape = gp.Coordinate(input_shape)
+    output_shape = gp.Coordinate(output_shape)
+
+    # get voxel sizes TODO: read from metadata?
+    voxel_size = gp.Coordinate((1,) * input_shape.dims())
+
+    # witch to world units:
+    input_size = voxel_size * input_shape
+    output_size = voxel_size * output_shape
+
+    # padding of groundtruth/mask
+    # without padding you random sampling won't be uniform over the whole volume
+    padding = output_size  # TODO: add sampling for extra lsd/affinities context
+
+    # define keys:
+    raw_key = gp.ArrayKey("RAW")
+    gt_key = gp.ArrayKey("GT")
+    mask_key = gp.ArrayKey("MASK")
+    affinity_key = gp.ArrayKey("AFFINITY")
+    affinity_mask_key = gp.ArrayKey("AFFINITY_MASK")
+    affinity_weight_key = gp.ArrayKey("WEIGHT")
+    lsd_key = gp.ArrayKey("LSD")
+    lsd_mask_key = gp.ArrayKey("LSD_MASK")
+
+    # Get source nodes:
+
+    raw_source = NapariImageSource(raw, raw_key)
+    # Pad raw infinitely with 0s. This is to avoid failing to train on any of
+    # the ground truth because there wasn't enough raw context.
+    raw_source += gp.Pad(raw_key, None, 0)
+
+    gt_source = NapariLabelsSource(gt, gt_key)
+
+    if mask is not None:
+        mask_source = NapariLabelsSource(mask, mask_key)
+    else:
+        with gp.build(gt_source):
+            mask_source = OnesSource(gt_source.spec[gt_key], mask_key)
+
+    # Pad gt/mask with just enough to make sure random sampling is uniform
+    gt_source += gp.Pad(gt_key, padding, 0)
+    mask_source += gp.Pad(mask_key, padding, 0)
+
+    pipeline = (
+        (raw_source, gt_source, mask_source) + gp.MergeProvider() + gp.RandomLocation()
+    )
+
+    # TODO: add augments
+
+    # Generate Affinities
+    pipeline += gp.AddAffinities(
+        offsets,
+        gt_key,
+        affinity_key,
+        labels_mask=mask_key,
+        affinities_mask=affinity_mask_key,
+    )
+    if lsds:
+        pipeline += AddLocalShapeDescriptor(
+            gt_key,
+            lsd_key,
+            mask=lsd_mask_key,
+            sigma=3.0 * voxel_size,
+        )
+
+    # balance loss weight between positive and negative affinities
+    pipeline += gp.BalanceLabels(affinity_key, affinity_weight_key)
+
+    # Trainer attributes:
+    if num_cpu_processes > 1:
+        pipeline += gp.PreCache(num_workers=num_cpu_processes)
+
+    # stack to create a batch dimension
+    pipeline += gp.Stack(batch_size)
+
+    # TODO: How to display profiling stats
+
+    # Train loop:
+    with gp.build(pipeline):
+        for iteration in range(num_iterations):
+            # create request
+            request = gp.BatchRequest()
+            request.add(raw_key, input_size)
+            request.add(affinity_key, output_size)
+            request.add(affinity_mask_key, output_size)
+            request.add(affinity_weight_key, output_size)
+            if lsds:
+                request.add(lsd_key, output_size)
+                request.add(lsd_mask_key, output_size)
+            # request additional keys for snapshots
+            if snapshot_interval is not None and iteration % snapshot_interval == 0:
+                request.add(gt_key, output_size)
+                request.add(mask_key, output_size)
+
+            # fetch data:
+            batch = pipeline.request_batch(request)
+            device = torch.device("cuda")
+            raw = torch.as_tensor(batch[raw_key].data, device=device)
+            aff_target = torch.as_tensor(batch[affinity_key].data, device=device)
+            aff_mask = torch.as_tensor(batch[affinity_mask_key].data, device=device)
+            aff_weight = torch.as_tensor(batch[affinity_weight_key].data, device=device)
+            torch_model = torch_model.to(device)
+
+            optimizer.zero_grad()
+            if lsds:
+                lsd_target = torch.as_tensor(batch[lsd_key], device=device)
+                lsd_mask = torch.as_tensor(batch[lsd_mask_key], device=device)
+
+                aff_pred, lsd_pred = torch_model(raw)
+
+                aff_loss = loss_func(
+                    aff_pred * aff_mask * aff_weight, aff_target * aff_mask * aff_weight
+                )
+                lsd_loss = loss_func(lsd_pred * lsd_mask, lsd_target * lsd_mask)
+                loss = aff_loss * lsd_loss
+            else:
+                aff_pred = torch_model(raw)
+                loss = loss_func(
+                    aff_pred * aff_mask * aff_weight, aff_target * aff_mask * aff_weight
+                )
+
+            if snapshot_interval is not None and iteration % snapshot_interval == 0:
+                # TODO: return layers live?
+                pass
+
+            loss.backward()
+            optimizer.step()
 
 
 def predict_affinities_widget(
