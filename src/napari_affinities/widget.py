@@ -1,7 +1,11 @@
+from concurrent.futures import thread
 from .gp import NapariImageSource, NapariLabelsSource, OnesSource
 
 from magicgui import magic_factory, magicgui
+from magicgui.widgets import create_widget, Container, PushButton
+
 import napari
+from napari.qt.threading import thread_worker, FunctionWorker
 
 import gunpowder as gp
 from affogato.segmentation import MWSGridGraph, compute_mws_clustering
@@ -26,7 +30,14 @@ from qtpy.QtWidgets import (
 
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
+
+
+def layer_choice_widget(viewer, annotation, **kwargs):
+    widget = create_widget(annotation=annotation, **kwargs)
+    widget.reset_choices()
+    viewer.layers.events.inserted.connect(widget.reset_choices)
+    return widget
 
 
 class ModelWidget(QWidget):
@@ -55,17 +66,7 @@ class ModelWidget(QWidget):
         # Train widget(Collapsable), use magicgui to avoid having to make layer dropdowns myself
         # Magicgui can't update layer dropdowns automatically anymore so add event listener
         collapsable_train_widget = QCollapsible("Training: expand for options:", self)
-        train_widget = magicgui(
-            train_affinities_widget,
-            call_button="Train Affinities",
-            parent={"bind": self},
-        )
-        train_widget.raw.reset_choices()
-        napari_viewer.layers.events.inserted.connect(train_widget.raw.reset_choices)
-        train_widget.gt.reset_choices()
-        napari_viewer.layers.events.inserted.connect(train_widget.gt.reset_choices)
-        train_widget.mask.reset_choices()
-        napari_viewer.layers.events.inserted.connect(train_widget.mask.reset_choices)
+        train_widget = self.train_widget(napari_viewer)
         collapsable_train_widget.addWidget(
             train_widget.native
         )  # FunctionGui -> QWidget via .native
@@ -105,6 +106,20 @@ class ModelWidget(QWidget):
             self.model_label.setText(new_model.name)
         else:
             self.model_label.setText("None")
+
+    def train_widget(self, viewer):
+        # inputs:
+        raw = layer_choice_widget(viewer, annotation=napari.layers.Image, name="raw")
+        gt = layer_choice_widget(viewer, annotation=napari.layers.Labels, name="gt")
+        mask = layer_choice_widget(viewer, annotation=napari.layers.Labels, name="mask")
+        lsds = create_widget(annotation=bool, name="lsds", value=True)
+        num_iterations = create_widget(
+            annotation=int, name="num iterations", value=1000
+        )
+
+        train_widget = Container(widgets=[raw, gt, mask, lsds, num_iterations])
+
+        return train_widget
 
     def model_from_file(self):
         dlg = QFileDialog()
