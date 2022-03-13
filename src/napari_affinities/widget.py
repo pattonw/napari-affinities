@@ -33,6 +33,7 @@ from qtpy.QtWidgets import (
 
 from pathlib import Path
 from typing import Optional, Dict
+import time
 
 
 def layer_choice_widget(viewer, annotation, **kwargs):
@@ -77,7 +78,7 @@ class ModelWidget(QWidget):
         iterations_frame = QFrame(collapsable_train_widget)
         iterations_layout = QHBoxLayout()
         iterations_label = QLabel("iterations:")
-        self.iterations_widget = QLabel("0")
+        self.iterations_widget = QLabel("None")
         iterations_layout.addWidget(iterations_label)
         iterations_layout.addWidget(self.iterations_widget)
         iterations_frame.setLayout(iterations_layout)
@@ -96,6 +97,7 @@ class ModelWidget(QWidget):
         self.training = False
         self.train_button = QPushButton("Train!", self)
         self.train_button.clicked.connect(self.continue_training)
+        self.train_button.setEnabled(False)
         self.pause_button = QPushButton("Pause!", self)
         self.pause_button.clicked.connect(self.pause_training)
         self.pause_button.setEnabled(False)
@@ -134,17 +136,24 @@ class ModelWidget(QWidget):
     def model(self, new_model: Optional[Model]):
         self.__model = new_model
         if new_model is not None:
+            self.__training_generator = self.train_affinities()
+            self.__training_generator.start()
+            self.__training_generator.pause()
+            self.__training_generator.yielded.connect(self.on_train_step)
+            self.train_button.setEnabled(True)
             self.model_label.setText(new_model.name)
         else:
             self.model_label.setText("None")
 
     def continue_training(self):
         self.training = True
+        self.__training_generator.resume()
         self.train_button.setEnabled(False)
         self.pause_button.setEnabled(True)
 
     def pause_training(self):
         self.training = False
+        self.__training_generator.pause()
         self.train_button.setEnabled(True)
         self.pause_button.setEnabled(False)
 
@@ -179,38 +188,21 @@ class ModelWidget(QWidget):
         if ok:
             self.model = bioimageio.core.load_resource_description(url)
 
+    def on_train_step(self, step_data):
+        iteration, loss = step_data
+        self.iterations_widget.setText(f"{iteration}")
+        self.loss_widget.setText(f"{loss}")
 
-def get_nn_instance(model_node: Model, **kwargs):
-    """
-    Get python torch model from a bioimage.io `Model` class
-    copied from:
-    https://github.com/bioimage-io/core-bioimage-io-python/blob/3364875eec581b5cd5950441915aa00219bbaf18/
-    bioimageio/core/prediction_pipeline/_model_adapters/_pytorch_model_adapter.py#L54
-    """
-    # TODO: This is torch specific. Bioimage-io models support many more
-    # model frameworks. How to handle non-torch models still needs to be
-    # handled
-    # Most notebooks/code I could find related to loading a bioimage-io model
-    # worked under the assumption that you knew what model, and thus what
-    # framework you would be using
+        if not self.training:
+            self.__training_generator.pause()
 
-    weight_spec = model_node.weights.get("pytorch_state_dict")
-    assert weight_spec is not None
-    assert isinstance(weight_spec.architecture, ImportedSource)
-    model_kwargs = weight_spec.kwargs
-    joined_kwargs = {} if model_kwargs is missing else dict(model_kwargs)
-    joined_kwargs.update(kwargs)
-    return weight_spec.architecture(**joined_kwargs)
-
-
-def train_affinities_widget(
-    parent: QWidget,
-    raw: napari.layers.Image,
-    gt: napari.layers.Labels,
-    mask: Optional[napari.layers.Labels] = None,
-    lsds: bool = False,
-    num_iterations: int = 1000,
-) -> napari.types.LayerDataTuple:
+    @thread_worker
+    def train_affinities(self) -> int:
+        current = 0
+        while True:
+            current += 1
+            yield current, 0.05
+            time.sleep(0.05)
     # get currently loaded model
     model = parent.model
     if model is None:
@@ -280,7 +272,9 @@ def train_affinities_widget(
     mask_source += gp.Pad(mask_key, padding, 0)
 
     pipeline = (
-        (raw_source, gt_source, mask_source) + gp.MergeProvider() + gp.RandomLocation()
+            (raw_source, gt_source, mask_source)
+            + gp.MergeProvider()
+            + gp.RandomLocation()
     )
 
     # TODO: add augments
@@ -336,7 +330,9 @@ def train_affinities_widget(
             raw = torch.as_tensor(batch[raw_key].data, device=device)
             aff_target = torch.as_tensor(batch[affinity_key].data, device=device)
             aff_mask = torch.as_tensor(batch[affinity_mask_key].data, device=device)
-            aff_weight = torch.as_tensor(batch[affinity_weight_key].data, device=device)
+                aff_weight = torch.as_tensor(
+                    batch[affinity_weight_key].data, device=device
+                )
             torch_model = torch_model.to(device)
 
             optimizer.zero_grad()
@@ -347,14 +343,16 @@ def train_affinities_widget(
                 aff_pred, lsd_pred = torch_model(raw)
 
                 aff_loss = loss_func(
-                    aff_pred * aff_mask * aff_weight, aff_target * aff_mask * aff_weight
+                        aff_pred * aff_mask * aff_weight,
+                        aff_target * aff_mask * aff_weight,
                 )
                 lsd_loss = loss_func(lsd_pred * lsd_mask, lsd_target * lsd_mask)
                 loss = aff_loss * lsd_loss
             else:
                 aff_pred = torch_model(raw)
                 loss = loss_func(
-                    aff_pred * aff_mask * aff_weight, aff_target * aff_mask * aff_weight
+                        aff_pred * aff_mask * aff_weight,
+                        aff_target * aff_mask * aff_weight,
                 )
 
             if snapshot_interval is not None and iteration % snapshot_interval == 0:
