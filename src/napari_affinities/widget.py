@@ -21,11 +21,13 @@ from xarray import DataArray
 from superqt import QCollapsible
 from qtpy.QtWidgets import (
     QWidget,
+    QHBoxLayout,
     QVBoxLayout,
     QPushButton,
     QFileDialog,
     QInputDialog,
     QLabel,
+    QFrame,
 )
 
 
@@ -70,6 +72,35 @@ class ModelWidget(QWidget):
         collapsable_train_widget.addWidget(
             train_widget.native
         )  # FunctionGui -> QWidget via .native
+
+        # add an iterations widget
+        iterations_frame = QFrame(collapsable_train_widget)
+        iterations_layout = QHBoxLayout()
+        iterations_label = QLabel("iterations:")
+        self.iterations_widget = QLabel("0")
+        iterations_layout.addWidget(iterations_label)
+        iterations_layout.addWidget(self.iterations_widget)
+        iterations_frame.setLayout(iterations_layout)
+        collapsable_train_widget.addWidget(iterations_frame)
+
+        # add a loss widget
+        loss_frame = QFrame(collapsable_train_widget)
+        loss_layout = QHBoxLayout()
+        loss_label = QLabel("loss:")
+        self.loss_widget = QLabel("nan")
+        loss_layout.addWidget(loss_label)
+        loss_layout.addWidget(self.loss_widget)
+        loss_frame.setLayout(loss_layout)
+        collapsable_train_widget.addWidget(loss_frame)
+
+        self.training = False
+        self.train_button = QPushButton("Train!", self)
+        self.train_button.clicked.connect(self.continue_training)
+        self.pause_button = QPushButton("Pause!", self)
+        self.pause_button.clicked.connect(self.pause_training)
+        self.pause_button.setEnabled(False)
+        collapsable_train_widget.addWidget(self.train_button)
+        collapsable_train_widget.addWidget(self.pause_button)
         layout.addWidget(collapsable_train_widget)
 
         # Predict widget(Collapsable), use magicgui to avoid having to make layer dropdowns myself
@@ -107,17 +138,24 @@ class ModelWidget(QWidget):
         else:
             self.model_label.setText("None")
 
+    def continue_training(self):
+        self.training = True
+        self.train_button.setEnabled(False)
+        self.pause_button.setEnabled(True)
+
+    def pause_training(self):
+        self.training = False
+        self.train_button.setEnabled(True)
+        self.pause_button.setEnabled(False)
+
     def train_widget(self, viewer):
         # inputs:
         raw = layer_choice_widget(viewer, annotation=napari.layers.Image, name="raw")
         gt = layer_choice_widget(viewer, annotation=napari.layers.Labels, name="gt")
         mask = layer_choice_widget(viewer, annotation=napari.layers.Labels, name="mask")
         lsds = create_widget(annotation=bool, name="lsds", value=True)
-        num_iterations = create_widget(
-            annotation=int, name="num iterations", value=1000
-        )
 
-        train_widget = Container(widgets=[raw, gt, mask, lsds, num_iterations])
+        train_widget = Container(widgets=[raw, gt, mask, lsds])
 
         return train_widget
 
