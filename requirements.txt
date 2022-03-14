@@ -9,13 +9,5 @@ pytest-qt
 npe2
 magicgui
 gunpowder
-git+git://github.com/funkelab/lsd.git
+git+git://github.com/pattonw/lsd.git@no-convenience-imports
 -e .
-
-# Dependencies of dependencies
-cython  # lsd
-mahotas  # lsd
-matplotlib  # lsd
-git+git://github.com/funkelab/funlib.segment.git  # lsd
-daisy  # lsd
-git+git://github.com/funkey/waterz.git  # lsd
