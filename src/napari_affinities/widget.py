@@ -104,8 +104,12 @@ class ModelWidget(QWidget):
         self.pause_button = QPushButton("Pause!", self)
         self.pause_button.clicked.connect(self.pause_training)
         self.pause_button.setEnabled(False)
+        self.snapshot_button = QPushButton("Snapshot!", self)
+        self.snapshot_button.clicked.connect(self.snapshot)
+        self.snapshot_button.setEnabled(False)
         collapsable_train_widget.addWidget(self.train_button)
         collapsable_train_widget.addWidget(self.pause_button)
+        collapsable_train_widget.addWidget(self.snapshot_button)
         layout.addWidget(collapsable_train_widget)
 
         # Predict widget(Collapsable), use magicgui to avoid having to make layer dropdowns myself
@@ -148,6 +152,7 @@ class ModelWidget(QWidget):
         self.__model = new_model
         if new_model is not None:
             self.train_button.setEnabled(True)
+            self.snapshot_button.setEnabled(True)
             self.model_label.setText(new_model.name)
         else:
             self.model_label.setText("None")
@@ -172,6 +177,14 @@ class ModelWidget(QWidget):
         self.__training_generator.pause()
         self.train_button.setEnabled(True)
         self.pause_button.setEnabled(False)
+
+    def snapshot(self):
+        if self.__training_generator is None:
+            self.continue_training()
+        self.__training_generator.send(True)
+        self.__training_generator.resume()
+        self.train_button.setEnabled(False)
+        self.pause_button.setEnabled(True)
 
     def create_train_widget(self, viewer):
         # inputs:
