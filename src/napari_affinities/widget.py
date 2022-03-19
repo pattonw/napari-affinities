@@ -188,10 +188,19 @@ class ModelWidget(QWidget):
 
     def create_train_widget(self, viewer):
         # inputs:
-        raw = layer_choice_widget(viewer, annotation=napari.layers.Image, name="raw")
+        raw = layer_choice_widget(
+            viewer,
+            annotation=napari.layers.Image,
+            name="raw",
+        )
         gt = layer_choice_widget(viewer, annotation=napari.layers.Labels, name="gt")
-        mask = layer_choice_widget(viewer, annotation=napari.layers.Labels, name="mask")
-        lsds = create_widget(annotation=bool, name="lsds", value=False)
+        mask = layer_choice_widget(viewer, annotation=Optional[napari.layers.Labels], name="mask")
+        lsds = create_widget(
+            annotation=Optional[float],
+            name="lsds",
+            label='<a href="https://localshapedescriptors.github.io"><font color=white>LSDs</font></a>',
+            value=False,
+        )
 
         train_widget = Container(widgets=[raw, gt, mask, lsds])
 
