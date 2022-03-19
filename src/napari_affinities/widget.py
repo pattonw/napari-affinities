@@ -261,7 +261,6 @@ class ModelWidget(QWidget):
 
         # Get necessary metadata:
         offsets = model.config["mws"]["offsets"]
-        snapshot_interval = None
         num_cpu_processes = 1
         batch_size = 1
         input_shape = (96, 96)  # TODO: read from metadata
@@ -408,10 +407,6 @@ class ModelWidget(QWidget):
                         aff_pred * aff_mask * aff_weight,
                         aff_target * aff_mask * aff_weight,
                     )
-
-                if snapshot_interval is not None and iteration % snapshot_interval == 0:
-                    # TODO: return layers live?
-                    pass
 
                 loss.backward()
                 optimizer.step()
