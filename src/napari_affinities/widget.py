@@ -218,12 +218,28 @@ class ModelWidget(QWidget):
             self.model = bioimageio.core.load_resource_description(url)
 
     def on_train_step(self, step_data):
-        iteration, loss = step_data
+        iteration, loss, *snapshot_layers = step_data
+        if len(snapshot_layers) > 0:
+            self.add_snapshot_layers(snapshot_layers)
         self.iterations_widget.setText(f"{iteration}")
         self.loss_widget.setText(f"{loss}")
 
-        if not self.training:
-            self.__training_generator.pause()
+    def add_snapshot_layers(self, layers):
+        # Directly modified from napari.utils._magicgui `add_layer_data_tuple_to_viewer`
+
+        for data, name, layer_type in layers:
+            # then try to update the viewer layer with that name.
+            try:
+                layer = self.viewer.layers[name]
+                layer.data = np.concatenate(
+                    [layer.data.reshape(*(-1, *data.shape[1:])), data], axis=0
+                )
+            except KeyError:  # layer not in the viewer
+                # remove batch_dim if this is the first sample added
+                if layer_type == "image":
+                    self.viewer.add_image(data[0], name=name)
+                elif layer_type == "labels":
+                    self.viewer.add_labels(data[0], name=name)
 
     @thread_worker
     def train_affinities(self, model, raw, gt, mask, lsds) -> int:
@@ -335,7 +351,7 @@ class ModelWidget(QWidget):
         with gp.build(pipeline):
             iteration = 0
             loss = float("nan")
-            yield (iteration, loss)
+            snapshot_iteration = yield (iteration, loss)
             while True:
                 # create request
                 request = gp.BatchRequest()
@@ -347,7 +363,7 @@ class ModelWidget(QWidget):
                     request.add(lsd_key, output_size)
                     request.add(lsd_mask_key, output_size)
                 # request additional keys for snapshots
-                if snapshot_interval is not None and iteration % snapshot_interval == 0:
+                if snapshot_iteration:
                     request.add(gt_key, output_size)
                     request.add(mask_key, output_size)
 
@@ -389,7 +405,50 @@ class ModelWidget(QWidget):
                 loss.backward()
                 optimizer.step()
                 iteration += 1
-                yield (iteration, loss)
+
+                if snapshot_iteration:
+                    # export arrays as layers
+                    layers = [
+                        (batch[raw_key].data, "sample_raw", "image"),
+                        (batch[gt_key].data, "sample_gt", "labels"),
+                        (batch[mask_key].data, "sample_mask", "labels"),
+                        (
+                            batch[affinity_key].data,
+                            "sample_affs_target",
+                            "image",
+                        ),
+                        (
+                            batch[affinity_mask_key].data,
+                            "sample_affs_mask",
+                            "labels",
+                        ),
+                        (
+                            batch[affinity_weight_key].data,
+                            "sample_affs_weight",
+                            "image",
+                        ),
+                        (
+                            aff_pred.detach().cpu().numpy(),
+                            "sample_affs_pred",
+                            "image",
+                        ),
+                    ]
+                    if lsds:
+                        layers += [
+                            (
+                                batch[lsd_key].data,
+                                "sample_lsd_target",
+                                "image",
+                            ),
+                            (
+                                batch[lsd_mask_key].data,
+                                "sample_lsd_mask",
+                                "labels",
+                            ),
+                        ]
+                    snapshot_iteration = yield (iteration, loss, *layers)
+                else:
+                    snapshot_iteration = yield (iteration, loss)
 
 
 def get_nn_instance(model_node: Model, **kwargs):
