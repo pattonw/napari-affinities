@@ -194,7 +194,9 @@ class ModelWidget(QWidget):
             name="raw",
         )
         gt = layer_choice_widget(viewer, annotation=napari.layers.Labels, name="gt")
-        mask = layer_choice_widget(viewer, annotation=Optional[napari.layers.Labels], name="mask")
+        mask = layer_choice_widget(
+            viewer, annotation=Optional[napari.layers.Labels], name="mask"
+        )
         lsds = create_widget(
             annotation=Optional[float],
             name="lsds",
