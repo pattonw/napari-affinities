@@ -50,7 +50,6 @@ class ModelWidget(QWidget):
         super().__init__()
 
         # initialize state variables
-        self.training = False
         self.__training_generator = None
 
         # Widget layout
@@ -140,7 +139,6 @@ class ModelWidget(QWidget):
         if self.__training_generator is not None:
             self.__training_generator.quit()
         self.__training_generator = None
-        self.training = False
         self.iterations_widget.setText("None")
         self.loss_widget.setText("nan")
 
@@ -155,7 +153,6 @@ class ModelWidget(QWidget):
             self.model_label.setText("None")
 
     def continue_training(self):
-        self.training = True
         if self.__training_generator is None:
             self.__training_generator = self.train_affinities(
                 self.model,
@@ -172,7 +169,6 @@ class ModelWidget(QWidget):
         self.pause_button.setEnabled(True)
 
     def pause_training(self):
-        self.training = False
         self.__training_generator.pause()
         self.train_button.setEnabled(True)
         self.pause_button.setEnabled(False)
