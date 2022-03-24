@@ -477,7 +477,13 @@ def get_nn_instance(model_node: Model, **kwargs):
     model_kwargs = weight_spec.kwargs
     joined_kwargs = {} if model_kwargs is missing else dict(model_kwargs)
     joined_kwargs.update(kwargs)
-    return weight_spec.architecture(**joined_kwargs)
+    model = weight_spec.architecture(**joined_kwargs)
+
+    weights = model_node.weights.get("pytorch_state_dict")
+    if weights is not None and weights.source:
+        state = torch.load(weights.source)
+        model.load_state_dict(state)
+    return model
 
 
 def predict_affinities_widget(
