@@ -69,15 +69,14 @@ class ModelWidget(QWidget):
         model_url_loader.clicked.connect(self.model_from_url)
         layout.addWidget(model_url_loader)
 
-        # Train widget(Collapsable), use magicgui to avoid having to make layer dropdowns myself
-        # Magicgui can't update layer dropdowns automatically anymore so add event listener
+        # Train widget(Collapsable)
         collapsable_train_widget = QCollapsible("Training: expand for options:", self)
         self.train_widget = self.create_train_widget(napari_viewer)
         collapsable_train_widget.addWidget(
             self.train_widget.native
         )  # FunctionGui -> QWidget via .native
 
-        # add an iterations widget
+        # add loss/iterations widget
         iterations_frame = QFrame(collapsable_train_widget)
         iterations_layout = QHBoxLayout()
         iterations_label = QLabel("iterations:")
@@ -87,7 +86,6 @@ class ModelWidget(QWidget):
         iterations_frame.setLayout(iterations_layout)
         collapsable_train_widget.addWidget(iterations_frame)
 
-        # add a loss widget
         loss_frame = QFrame(collapsable_train_widget)
         loss_layout = QHBoxLayout()
         loss_label = QLabel("loss:")
@@ -97,6 +95,7 @@ class ModelWidget(QWidget):
         loss_frame.setLayout(loss_layout)
         collapsable_train_widget.addWidget(loss_frame)
 
+        # add buttons
         self.reset_training_state()
         self.train_button = QPushButton("Train!", self)
         self.train_button.clicked.connect(self.continue_training)
@@ -110,23 +109,21 @@ class ModelWidget(QWidget):
         collapsable_train_widget.addWidget(self.train_button)
         collapsable_train_widget.addWidget(self.pause_button)
         collapsable_train_widget.addWidget(self.snapshot_button)
+
         layout.addWidget(collapsable_train_widget)
 
-        # Predict widget(Collapsable), use magicgui to avoid having to make layer dropdowns myself
-        # Magicgui can't update layer dropdowns automatically anymore so add event listener
+        # Predict widget(Collapsable)
         collapsable_predict_widget = QCollapsible(
             "Prediction: expand for options:", self
         )
-        predict_widget = magicgui(
-            predict_affinities_widget,
-            call_button="Predict Affinities",
-            parent={"bind": self},
-        )
-        predict_widget.raw.reset_choices()
-        napari_viewer.layers.events.inserted.connect(predict_widget.raw.reset_choices)
-        collapsable_predict_widget.addWidget(
-            predict_widget.native
-        )  # FunctionGui -> QWidget via .native
+        predict_widget = self.create_predict_widget(napari_viewer)
+        collapsable_predict_widget.addWidget(predict_widget)
+
+        # add buttons
+        self.predict_button = QPushButton("Train!", self)
+        self.predict_button.clicked.connect(self.predict)
+        self.predict_button.setEnabled(False)
+
         layout.addWidget(collapsable_predict_widget)
 
         # activate layout
@@ -181,7 +178,15 @@ class ModelWidget(QWidget):
     def snapshot(self):
         if self.__training_generator is None:
             self.continue_training()
-        self.__training_generator.send(True)
+        self.__training_generator.send("snapshot")
+        self.__training_generator.resume()
+        self.train_button.setEnabled(False)
+        self.pause_button.setEnabled(True)
+
+    def predict(self):
+        if self.__training_generator is None:
+            self.continue_training()
+        self.__training_generator.send("predict")
         self.__training_generator.resume()
         self.train_button.setEnabled(False)
         self.pause_button.setEnabled(True)
@@ -207,6 +212,18 @@ class ModelWidget(QWidget):
         train_widget = Container(widgets=[raw, gt, mask, lsds])
 
         return train_widget
+
+    def create_predict_widget(self, viewer):
+        # inputs:
+        raw = layer_choice_widget(
+            viewer,
+            annotation=napari.layers.Image,
+            name="raw",
+        )
+
+        predict_widget = Container(widgets=[raw])
+
+        return predict_widget
 
     def model_from_file(self):
         dlg = QFileDialog()
@@ -252,26 +269,53 @@ class ModelWidget(QWidget):
                 elif layer_type == "labels":
                     self.viewer.add_labels(data[0], name=name)
 
+    def get_torch_module(self):
+        """
+        Get python torch model from a bioimage.io `Model` class
+        copied from:
+        https://github.com/bioimage-io/core-bioimage-io-python/blob/3364875eec581b5cd5950441915aa00219bbaf18/
+        bioimageio/core/prediction_pipeline/_model_adapters/_pytorch_model_adapter.py#L54
+        """
+        # TODO: This is torch specific. Bioimage-io models support many more
+        # model frameworks. How to handle non-torch models still needs to be
+        # handled
+        # Most notebooks/code I could find related to loading a bioimage-io model
+        # worked under the assumption that you knew what model, and thus what
+        # framework you would be using
+
+        weight_spec = self.model.weights.get("pytorch_state_dict")
+        assert weight_spec is not None
+        assert isinstance(weight_spec.architecture, ImportedSource)
+        model_kwargs = weight_spec.kwargs
+        joined_kwargs = {} if model_kwargs is missing else dict(model_kwargs)
+        model = weight_spec.architecture(**joined_kwargs)
+
+        weights = self.model.weights.get("pytorch_state_dict")
+        if weights is not None and weights.source:
+            state = torch.load(weights.source)
+            model.load_state_dict(state)
+        return model
+
     @thread_worker
-    def train_affinities(self, model, raw, gt, mask, lsds) -> int:
+    def train_affinities(self, raw, gt, mask, lsds) -> int:
 
         iteration = 0
-        if model is None:
+        if self.model is None:
             raise ValueError("Please load a model either from your filesystem or a url")
 
         # Get necessary metadata:
-        offsets = model.config["mws"]["offsets"]
+        offsets = self.model.config["mws"]["offsets"]
         num_cpu_processes = 1
         batch_size = 1
         input_shape = (96, 96)  # TODO: read from metadata
         output_shape = (96, 96)  # TODO: read from metadata
 
         # extract torch model from bioimageio format
-        torch_model = get_nn_instance(model)
+        torch_module = self.get_torch_module()
 
         # define Loss function and Optimizer TODO: make options available as choices?
         loss_func = torch.nn.MSELoss()
-        optimizer = torch.optim.Adam(params=torch_model.parameters())
+        optimizer = torch.optim.Adam(params=torch_module.parameters())
 
         ##############################################################################
         ########################## Create Training Pipeline ##########################
@@ -361,8 +405,9 @@ class ModelWidget(QWidget):
         with gp.build(pipeline):
             iteration = 0
             loss = float("nan")
-            snapshot_iteration = yield (iteration, loss)
+            mode = yield (iteration, loss)
             while True:
+                snapshot_iteration = mode == "snapshot"
                 # create request
                 request = gp.BatchRequest()
                 request.add(raw_key, input_size)
@@ -386,14 +431,14 @@ class ModelWidget(QWidget):
                 aff_weight = torch.as_tensor(
                     batch[affinity_weight_key].data, device=device
                 )
-                torch_model = torch_model.to(device)
+                torch_module = torch_module.to(device)
 
                 optimizer.zero_grad()
                 if lsds:
                     lsd_target = torch.as_tensor(batch[lsd_key], device=device)
                     lsd_mask = torch.as_tensor(batch[lsd_mask_key], device=device)
 
-                    aff_pred, lsd_pred = torch_model(raw)
+                    aff_pred, lsd_pred = torch_module(raw)
 
                     aff_loss = loss_func(
                         aff_pred * aff_mask * aff_weight,
@@ -402,7 +447,7 @@ class ModelWidget(QWidget):
                     lsd_loss = loss_func(lsd_pred * lsd_mask, lsd_target * lsd_mask)
                     loss = aff_loss * lsd_loss
                 else:
-                    aff_pred = torch_model(raw)
+                    aff_pred = torch_module(raw)
                     loss = loss_func(
                         aff_pred * aff_mask * aff_weight,
                         aff_target * aff_mask * aff_weight,
@@ -452,9 +497,9 @@ class ModelWidget(QWidget):
                                 "labels",
                             ),
                         ]
-                    snapshot_iteration = yield (iteration, loss, *layers)
+                    mode = yield (iteration, loss, *layers)
                 else:
-                    snapshot_iteration = yield (iteration, loss)
+                    mode = yield (iteration, loss)
 
 
 def get_nn_instance(model_node: Model, **kwargs):
