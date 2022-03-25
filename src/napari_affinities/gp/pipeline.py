@@ -41,14 +41,11 @@ class PipelineDataGenerator:
         snapshot_arrays = []
         for key, layer_type in self.keys:
             if key in request_template:
+                layer = (batch[key].data, {"name": f"sample_{key}".lower()}, layer_type)
                 if key in self.request:
-                    arrays.append(
-                        (batch[key].data, f"sample_{key}".lower(), layer_type)
-                    )
+                    arrays.append(layer)
                 else:
-                    snapshot_arrays.append(
-                        (batch[key].data, f"sample_{key}".lower(), layer_type)
-                    )
+                    snapshot_arrays.append(layer)
 
         return arrays, snapshot_arrays
 
@@ -66,8 +63,8 @@ def build_pipeline(
     # read metadata from model
     offsets = model.config["mws"]["offsets"]
     dims = len(offsets[0])
-    input_shape = gp.Coordinate(model.inputs[0].shape[-dims:])
-    output_shape = gp.Coordinate(model.outputs[0])
+    input_shape = gp.Coordinate(model.inputs[0].shape.min[-dims:])
+    output_shape = gp.Coordinate(input_shape)
 
     # get voxel sizes TODO: read from metadata?
     voxel_size = gp.Coordinate((1,) * input_shape.dims())
