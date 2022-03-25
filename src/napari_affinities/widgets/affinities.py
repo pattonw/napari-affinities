@@ -253,8 +253,8 @@ class ModelWidget(QWidget):
         if len(layers) > 0:
             self.add_layers(layers)
         if iteration is not None and loss is not None:
-        self.iterations_widget.setText(f"{iteration}")
-        self.loss_widget.setText(f"{loss}")
+            self.iterations_widget.setText(f"{iteration}")
+            self.loss_widget.setText(f"{loss}")
         else:
             self.__training_generator.pause()
             self.train_button.setEnabled(True)
@@ -320,111 +320,111 @@ class ModelWidget(QWidget):
                     self.model.weights["pytorch_state_dict"].source = Path(checkpoint)
 
                     offsets = self.model.config["mws"]["offsets"]
-        ndim = len(offsets[0])
+                    ndim = len(offsets[0])
 
-        # Assuming raw data comes in with a channel dim
-        # This doesn't have to be the case, in which case
-        # plugin will fail.
-        # TODO: How to determine axes of raw data. metadata?
-        # guess? simply make it fit what the model expects?
+                    # Assuming raw data comes in with a channel dim
+                    # This doesn't have to be the case, in which case
+                    # plugin will fail.
+                    # TODO: How to determine axes of raw data. metadata?
+                    # guess? simply make it fit what the model expects?
 
-        # add batch dimension
+                    # add batch dimension
                     pred_data = pred_data.reshape((1, *pred_data.shape))
 
                     with create_prediction_pipeline(bioimageio_model=self.model) as pp:
-            # [0] to access first input array/output array
+                        # [0] to access first input array/output array
                         pred_data = DataArray(
                             pred_data, dims=tuple(pp.input_specs[0].axes)
                         )
                         affs = pp(pred_data)[0].values
 
-        # remove batch dimensions
+                    # remove batch dimensions
                     pred_data = pred_data.squeeze()
-        affs = affs.squeeze()
+                    affs = affs.squeeze()
 
-        # assert result is as expected
+                    # assert result is as expected
                     assert (
                         pred_data.ndim == ndim
                     ), f"Raw has dims: {pred_data.ndim}, but expected: {ndim}"
-        assert (
-            affs.ndim == ndim + 1
-        ), f"Affs have dims: {affs.ndim}, but expected: {ndim+1}"
-        assert affs.shape[0] == len(offsets), (
-            f"Number of affinity channels ({affs.shape[0]}) "
-            f"does not match number of offsets ({len(offsets)})"
-        )
+                    assert (
+                        affs.ndim == ndim + 1
+                    ), f"Affs have dims: {affs.ndim}, but expected: {ndim+1}"
+                    assert affs.shape[0] == len(offsets), (
+                        f"Number of affinity channels ({affs.shape[0]}) "
+                        f"does not match number of offsets ({len(offsets)})"
+                    )
 
-        # Generate affinities and keep the offsets as metadata
+                    # Generate affinities and keep the offsets as metadata
                     mode = yield (
                         None,
                         None,
                         (
-            affs,
-            {
-                "name": "Affinities",
-                "metadata": {"offsets": offsets},
-            },
-            "image",
+                            affs,
+                            {
+                                "name": "Affinities",
+                                "metadata": {"offsets": offsets},
+                            },
+                            "image",
                         ),
-        )
+                    )
                 else:
 
-                # fetch data:
-                arrays, snapshot_arrays = pipeline.next(snapshot_iteration)
-                tensors = [
+                    # fetch data:
+                    arrays, snapshot_arrays = pipeline.next(snapshot_iteration)
+                    tensors = [
                         torch.as_tensor(array[0], device=device).float()
                         for array in arrays
-                ]
-                raw, aff_target, aff_mask, *lsd_arrays = tensors
+                    ]
+                    raw, aff_target, aff_mask, *lsd_arrays = tensors
 
-                optimizer.zero_grad()
-                if lsds:
-                    lsd_target, lsd_mask = lsd_arrays
+                    optimizer.zero_grad()
+                    if lsds:
+                        lsd_target, lsd_mask = lsd_arrays
 
-                    aff_pred, lsd_pred = torch_module(raw)
+                        aff_pred, lsd_pred = torch_module(raw)
 
-                    aff_loss = aff_loss_func(
-                        aff_pred * aff_mask,
-                        aff_target * aff_mask,
-                    )
+                        aff_loss = aff_loss_func(
+                            aff_pred * aff_mask,
+                            aff_target * aff_mask,
+                        )
                         lsd_loss = lsd_loss_func(
                             lsd_pred * lsd_mask, lsd_target * lsd_mask
                         )
-                    loss = aff_loss * lsd_loss
-                else:
-                    aff_pred = torch_module(raw)
-                    loss = aff_loss_func(
-                        aff_pred * aff_mask,
-                        aff_target * aff_mask,
-                    )
+                        loss = aff_loss * lsd_loss
+                    else:
+                        aff_pred = torch_module(raw)
+                        loss = aff_loss_func(
+                            aff_pred * aff_mask,
+                            aff_target * aff_mask,
+                        )
 
-                loss.backward()
-                optimizer.step()
-                iteration += 1
+                    loss.backward()
+                    optimizer.step()
+                    iteration += 1
 
-                if snapshot_iteration:
-                    pred_arrays = []
-                    pred_arrays.append(
+                    if snapshot_iteration:
+                        pred_arrays = []
+                        pred_arrays.append(
                             (
                                 aff_pred.detach().cpu().numpy(),
                                 {"name": "sample_aff_pred"},
                                 "image",
                             )
-                    )
-                    if lsds:
-                        pred_arrays.append(
-                            (
-                                lsd_pred.detach().cpu().numpy(),
-                                    {"name": "sample_lsd_pred"},
-                                "image",
-                            )
                         )
-                    mode = yield (
-                        iteration,
-                        loss,
-                        *arrays,
-                        *snapshot_arrays,
-                        *pred_arrays,
-                    )
-                else:
-                    mode = yield (iteration, loss)
+                        if lsds:
+                            pred_arrays.append(
+                                (
+                                    lsd_pred.detach().cpu().numpy(),
+                                    {"name": "sample_lsd_pred"},
+                                    "image",
+                                )
+                            )
+                        mode = yield (
+                            iteration,
+                            loss,
+                            *arrays,
+                            *snapshot_arrays,
+                            *pred_arrays,
+                        )
+                    else:
+                        mode = yield (iteration, loss)
