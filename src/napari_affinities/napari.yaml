@@ -12,10 +12,10 @@ contributions:
       python_name: napari_affinities._writer:write_single_image
       title: Save image data with napari Affinities
     - id: napari-affinities.make_mutex_watershed_widget
-      python_name: napari_affinities.widget:mutex_watershed_widget
+      python_name: napari_affinities.widgets.mutex_watershed:mutex_watershed_widget
       title: Make mutex watershed widget
     - id: napari-affinities.make_affinities_widget
-      python_name: napari_affinities.widget:ModelWidget
+      python_name: napari_affinities.widgets.affinities:ModelWidget
       title: Make model widget
     - id: napari-affinities.sample_epithelial
       python_name: napari_affinities.sample_data:sample_epithelial
