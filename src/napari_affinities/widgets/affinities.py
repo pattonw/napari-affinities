@@ -160,17 +160,19 @@ class ModelWidget(QWidget):
                 self.train_widget.mask.value,
                 self.train_widget.lsds.value,
             )
-            self.__training_generator.yielded.connect(self.on_train_step)
+            self.__training_generator.yielded.connect(self.on_yield)
             self.__training_generator.start()
         else:
             self.__training_generator.resume()
         self.train_button.setEnabled(False)
         self.pause_button.setEnabled(True)
+        self.predict_button.setEnabled(True)
 
     def pause_training(self):
         self.__training_generator.pause()
         self.train_button.setEnabled(True)
         self.pause_button.setEnabled(False)
+        self.predict_button.setEnabled(True)
 
     def snapshot(self):
         if self.__training_generator is None:
@@ -179,14 +181,18 @@ class ModelWidget(QWidget):
         self.__training_generator.resume()
         self.train_button.setEnabled(False)
         self.pause_button.setEnabled(True)
+        self.predict_button.setEnabled(True)
 
     def predict(self):
         if self.__training_generator is None:
             self.continue_training()
-        self.__training_generator.send("predict")
+        self.__training_generator.send(
+            self.train_widget.raw.value.data,
+        )
         self.__training_generator.resume()
         self.train_button.setEnabled(False)
         self.pause_button.setEnabled(True)
+        self.predict_button.setEnabled(True)
 
     def create_train_widget(self, viewer):
         # inputs:
@@ -214,7 +220,7 @@ class ModelWidget(QWidget):
         # inputs:
         raw = layer_choice_widget(
             viewer,
-            annotation=napari.layers.Image,
+            annotation=napari.types.ImageData,
             name="raw",
         )
 
@@ -242,18 +248,24 @@ class ModelWidget(QWidget):
         if ok:
             self.model = bioimageio.core.load_resource_description(url)
 
-    def on_train_step(self, step_data):
-        iteration, loss, *snapshot_layers = step_data
-        if len(snapshot_layers) > 0:
-            self.add_snapshot_layers(snapshot_layers)
+    def on_yield(self, step_data):
+        iteration, loss, *layers = step_data
+        if len(layers) > 0:
+            self.add_layers(layers)
+        if iteration is not None and loss is not None:
         self.iterations_widget.setText(f"{iteration}")
         self.loss_widget.setText(f"{loss}")
+        else:
+            self.__training_generator.pause()
+            self.train_button.setEnabled(True)
+            self.pause_button.setEnabled(False)
 
-    def add_snapshot_layers(self, layers):
+    def add_layers(self, layers):
         # Directly modified from napari.utils._magicgui `add_layer_data_tuple_to_viewer`
 
-        for data, name, layer_type in layers:
+        for data, metadata, layer_type in layers:
             # then try to update the viewer layer with that name.
+            name = metadata.pop("name")
             try:
                 layer = self.viewer.layers[name]
                 layer.data = np.concatenate(
@@ -262,9 +274,9 @@ class ModelWidget(QWidget):
             except KeyError:  # layer not in the viewer
                 # remove batch_dim if this is the first sample added
                 if layer_type == "image":
-                    self.viewer.add_image(data[0], name=name)
+                    self.viewer.add_image(data[0], name=name, **metadata)
                 elif layer_type == "labels":
-                    self.viewer.add_labels(data[0], name=name)
+                    self.viewer.add_labels(data[0], name=name, **metadata)
 
     def predict(self, raw):
         model = self.model
