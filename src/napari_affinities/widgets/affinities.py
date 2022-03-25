@@ -278,50 +278,6 @@ class ModelWidget(QWidget):
                 elif layer_type == "labels":
                     self.viewer.add_labels(data[0], name=name, **metadata)
 
-    def predict(self, raw):
-        model = self.model
-
-        offsets = model.config["mws"]["offsets"]
-        ndim = len(offsets[0])
-
-        # Assuming raw data comes in with a channel dim
-        # This doesn't have to be the case, in which case
-        # plugin will fail.
-        # TODO: How to determine axes of raw data. metadata?
-        # guess? simply make it fit what the model expects?
-
-        # add batch dimension
-        raw = raw.reshape((1, *raw.shape))
-
-        with create_prediction_pipeline(bioimageio_model=model) as pp:
-            # [0] to access first input array/output array
-            raw = DataArray(raw, dims=tuple(pp.input_specs[0].axes))
-            affs = pp(raw)[0].values
-
-        # remove batch dimensions
-        raw = raw.squeeze()
-        affs = affs.squeeze()
-
-        # assert result is as expected
-        assert raw.ndim == ndim, f"Raw has dims: {raw.ndim}, but expected: {ndim}"
-        assert (
-            affs.ndim == ndim + 1
-        ), f"Affs have dims: {affs.ndim}, but expected: {ndim+1}"
-        assert affs.shape[0] == len(offsets), (
-            f"Number of affinity channels ({affs.shape[0]}) "
-            f"does not match number of offsets ({len(offsets)})"
-        )
-
-        # Generate affinities and keep the offsets as metadata
-        return (
-            affs,
-            {
-                "name": "Affinities",
-                "metadata": {"offsets": offsets},
-            },
-            "image",
-        )
-
     @thread_worker
     def train_affinities(self, raw, gt, mask, lsds) -> int:
 
@@ -349,12 +305,75 @@ class ModelWidget(QWidget):
             loss = float("nan")
             mode = yield (iteration, loss)
             while True:
-                snapshot_iteration = mode == "snapshot"
+                if mode is None or mode == "snapshot":
+                    predict = False
+                    snapshot_iteration = mode is not None
+                elif isinstance(mode, np.ndarray):
+                    predict = True
+                    pred_data = mode
+                else:
+                    raise Exception(f"Uknown mode: {mode}")
+
+                if predict:
+                    checkpoint = f"checkpoints/{iteration}"
+                    torch.save(torch_module.state_dict(), Path(checkpoint))
+                    self.model.weights["pytorch_state_dict"].source = Path(checkpoint)
+
+                    offsets = self.model.config["mws"]["offsets"]
+        ndim = len(offsets[0])
+
+        # Assuming raw data comes in with a channel dim
+        # This doesn't have to be the case, in which case
+        # plugin will fail.
+        # TODO: How to determine axes of raw data. metadata?
+        # guess? simply make it fit what the model expects?
+
+        # add batch dimension
+                    pred_data = pred_data.reshape((1, *pred_data.shape))
+
+                    with create_prediction_pipeline(bioimageio_model=self.model) as pp:
+            # [0] to access first input array/output array
+                        pred_data = DataArray(
+                            pred_data, dims=tuple(pp.input_specs[0].axes)
+                        )
+                        affs = pp(pred_data)[0].values
+
+        # remove batch dimensions
+                    pred_data = pred_data.squeeze()
+        affs = affs.squeeze()
+
+        # assert result is as expected
+                    assert (
+                        pred_data.ndim == ndim
+                    ), f"Raw has dims: {pred_data.ndim}, but expected: {ndim}"
+        assert (
+            affs.ndim == ndim + 1
+        ), f"Affs have dims: {affs.ndim}, but expected: {ndim+1}"
+        assert affs.shape[0] == len(offsets), (
+            f"Number of affinity channels ({affs.shape[0]}) "
+            f"does not match number of offsets ({len(offsets)})"
+        )
+
+        # Generate affinities and keep the offsets as metadata
+                    mode = yield (
+                        None,
+                        None,
+                        (
+            affs,
+            {
+                "name": "Affinities",
+                "metadata": {"offsets": offsets},
+            },
+            "image",
+                        ),
+        )
+                else:
 
                 # fetch data:
                 arrays, snapshot_arrays = pipeline.next(snapshot_iteration)
                 tensors = [
-                    torch.as_tensor(array[0], device=device).float() for array in arrays
+                        torch.as_tensor(array[0], device=device).float()
+                        for array in arrays
                 ]
                 raw, aff_target, aff_mask, *lsd_arrays = tensors
 
@@ -368,7 +387,9 @@ class ModelWidget(QWidget):
                         aff_pred * aff_mask,
                         aff_target * aff_mask,
                     )
-                    lsd_loss = lsd_loss_func(lsd_pred * lsd_mask, lsd_target * lsd_mask)
+                        lsd_loss = lsd_loss_func(
+                            lsd_pred * lsd_mask, lsd_target * lsd_mask
+                        )
                     loss = aff_loss * lsd_loss
                 else:
                     aff_pred = torch_module(raw)
@@ -384,13 +405,17 @@ class ModelWidget(QWidget):
                 if snapshot_iteration:
                     pred_arrays = []
                     pred_arrays.append(
-                        (aff_pred.detach().cpu().numpy(), "sample_aff_pred", "image")
+                            (
+                                aff_pred.detach().cpu().numpy(),
+                                {"name": "sample_aff_pred"},
+                                "image",
+                            )
                     )
                     if lsds:
                         pred_arrays.append(
                             (
                                 lsd_pred.detach().cpu().numpy(),
-                                "sample_lsd_pred",
+                                    {"name": "sample_lsd_pred"},
                                 "image",
                             )
                         )
