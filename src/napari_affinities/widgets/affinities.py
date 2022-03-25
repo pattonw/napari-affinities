@@ -112,9 +112,10 @@ class ModelWidget(QWidget):
         collapsable_predict_widget.addWidget(self.predict_widget.native)
 
         # add buttons
-        self.predict_button = QPushButton("Train!", self)
+        self.predict_button = QPushButton("Predict!", self)
         self.predict_button.clicked.connect(self.predict)
         self.predict_button.setEnabled(False)
+        collapsable_predict_widget.addWidget(self.predict_button)
 
         layout.addWidget(collapsable_predict_widget)
 
