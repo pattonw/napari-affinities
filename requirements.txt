@@ -9,5 +9,6 @@ pytest-qt
 npe2
 magicgui
 git+https://github.com/funkey/gunpowder@patch-1.2.3
-git+git://github.com/pattonw/lsd.git@no-convenience-imports
+bioimageio.core
+git+https://github.com/pattonw/lsd.git@no-convenience-imports
 -e .
