@@ -19,7 +19,7 @@ class NapariLabelsSource(gp.BatchProvider):
 
     def __init__(self, labels: Labels, key: gp.ArrayKey):
         self.array_spec = self._read_metadata(labels)
-        self.labels = gp.Array(labels.data, self.array_spec)
+        self.labels = gp.Array(self._remove_leading_dims(labels.data), self.array_spec)
         self.key = key
 
     def setup(self):
@@ -38,6 +38,13 @@ class NapariLabelsSource(gp.BatchProvider):
         output.profiling_stats.add(timing_provide)
 
         return output
+
+    def _remove_leading_dims(self, data):
+        print(data.shape)
+        while data.shape[0] == 1:
+            data = data[0]
+            print(data.shape)
+        return data
 
     def _read_metadata(self, labels):
         # offset assumed to be in world coordinates

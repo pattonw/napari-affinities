@@ -19,7 +19,7 @@ class NapariImageSource(gp.BatchProvider):
 
     def __init__(self, image: Image, key: gp.ArrayKey):
         self.array_spec = self._read_metadata(image)
-        self.image = gp.Array(image.data, self.array_spec)
+        self.image = gp.Array(self._remove_leading_dims(image.data), self.array_spec)
         self.key = key
 
     def setup(self):
@@ -39,8 +39,16 @@ class NapariImageSource(gp.BatchProvider):
 
         return output
 
+    def _remove_leading_dims(self, data):
+        print(data.shape)
+        while data.shape[0] == 1:
+            data = data[0]
+            print(data.shape)
+        return data
+
     def _read_metadata(self, image):
         # offset assumed to be in world coordinates
+        # TODO: read from metadata
         offset = gp.Coordinate(image.metadata.get("offset", (1, 1)))
         voxel_size = gp.Coordinate(image.metadata.get("resolution", (1, 1)))
         shape = gp.Coordinate(image.data.shape[-offset.dims() :])
