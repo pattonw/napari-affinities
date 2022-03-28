@@ -32,11 +32,8 @@ class OnesSource(gp.BatchProvider):
         spec.roi = request[self.key].roi
         assert spec.voxel_size is not None, "Please provide a voxel size!"
 
-        # make sure to add a channel dimension. All napari sources have channel dimensions
         output[self.key] = gp.Array(
-            np.ones(
-                (1,) + tuple(spec.roi.get_shape() / spec.voxel_size), dtype=spec.dtype
-            ),
+            np.ones(tuple(spec.roi.get_shape() / spec.voxel_size), dtype=spec.dtype),
             spec=spec,
         )
 

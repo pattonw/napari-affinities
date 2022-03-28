@@ -130,6 +130,9 @@ def build_pipeline(
     if num_cpu_processes > 1:
         pipeline += gp.PreCache(num_workers=num_cpu_processes)
 
+    # add channel dimensions
+    pipeline += gp.Unsqueeze([raw_key, gt_key, mask_key])
+
     # stack to create a batch dimension
     pipeline += gp.Stack(batch_size)
 
