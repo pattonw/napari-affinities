@@ -32,11 +32,13 @@ To install latest development version :
     pip install git+https://github.com/pattonw/napari-affinities.git
 
 Install torch according to your system [(follow the instructions here)](https://pytorch.org/get-started/locally/). For example with cuda 10.2 available, run:
+
     conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
 
 Then install all requirements:
+
     conda install -c conda-forge affogato
-    pip install cython (this must be installed before the requirements.txt)
+    pip install cython # this must be installed before the requirements.txt
     pip install -r requirements.txt
 
 
