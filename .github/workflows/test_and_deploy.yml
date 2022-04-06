@@ -81,7 +81,7 @@ jobs:
 
       - name: run pytest
         run: |
-          pytest -v --color=yes --cov-report=xml
+          pytest -v --color=yes
 
       # # this runs the platform-specific tests declared in tox.ini
       # - name: Test with tox
