@@ -68,6 +68,7 @@ jobs:
           conda list      
           which python
           conda list
+          python -c "import sys;print(sys.executable)"
           python -c "import torch"
           conda install -c conda-forge affogato --yes
           pip install cython
