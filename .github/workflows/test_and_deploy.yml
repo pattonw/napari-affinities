@@ -68,6 +68,12 @@ jobs:
       - name: Install pytorch
         run: |
           conda install pytorch cpuonly -c pytorch --yes
+      - name: Conda info
+        shell: bash -l {0}
+        run: conda list
+
+      - name: Check pytorch
+        run: |
           python -c "import torch"
       - name: Install affogato
         run: |
