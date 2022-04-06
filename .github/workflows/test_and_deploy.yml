@@ -64,6 +64,8 @@ jobs:
         run: |
           echo $CONDA
           ls $CONDA
+          ls $CONDA/bin
+          ls $CONDA/envs/test
           python -m pip install --upgrade pip
           $CONDA/bin/conda install pytorch cpuonly -c pytorch --yes
           $CONDA/bin/conda list
