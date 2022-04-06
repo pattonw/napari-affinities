@@ -67,11 +67,9 @@ jobs:
           $CONDA/bin/conda list
           $CONDA/bin/python -c "import torch"
           $CONDA/bin/conda install -c conda-forge affogato --yes --name base
-          pip install cython
-          pip install -r requirements.txt
-          which python
+          $CONDA/bin/python -m pip install cython
+          $CONDA/bin/python -m pip install -r requirements.txt
           python -c "import gunpowder"
-          ls $CONDA
 
       - name: Run test
         run: |
