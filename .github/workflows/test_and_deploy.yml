@@ -68,6 +68,7 @@ jobs:
       - name: Install pytorch
         run: |
           conda install pytorch cpuonly -c pytorch --yes
+          python -c "import torch"
       - name: Install affogato
         run: |
           conda install -c conda-forge affogato --yes
