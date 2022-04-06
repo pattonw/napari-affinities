@@ -74,8 +74,7 @@ jobs:
 
       - name: Run test
         run: |
-          $CONDA/bin/conda install pytest --name base
-          pytest -v --color=yes
+          $CONDA/bin/python -m pytest -v --color=yes
 
       # # this runs the platform-specific tests declared in tox.ini
       # - name: Test with tox
