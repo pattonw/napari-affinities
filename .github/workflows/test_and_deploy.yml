@@ -64,9 +64,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           $CONDA/bin/conda install pytorch cpuonly -c pytorch --yes
-          conda list      
+          $CONDA/bin/conda list      
           which python
-          $CONDA/bin/conda install list
+          $CONDA/bin/conda list
           python -c "import sys;print(sys.executable)"
           python -c "import torch"
           $CONDA/bin/conda install -c conda-forge affogato --yes
