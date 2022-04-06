@@ -65,7 +65,7 @@ jobs:
           python -m pip install --upgrade pip
           $CONDA/bin/conda install pytorch cpuonly -c pytorch --yes --name base
           $CONDA/bin/conda list
-          python -c "import torch"
+          $CONDA/envs/test/bin/python -c "import torch"
           $CONDA/bin/conda install -c conda-forge affogato --yes --name base
           pip install cython
           pip install -r requirements.txt
