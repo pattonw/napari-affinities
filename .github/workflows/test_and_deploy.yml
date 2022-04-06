@@ -62,15 +62,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          echo $CONDA
-          ls $CONDA
-          ls $CONDA/bin
-          ls $CONDA/envs/test
           python -m pip install --upgrade pip
-          $CONDA/bin/conda install pytorch cpuonly -c pytorch --yes
+          $CONDA/bin/conda install pytorch cpuonly -c pytorch --yes --name base
           $CONDA/bin/conda list
           python -c "import torch"
-          $CONDA/bin/conda install -c conda-forge affogato --yes
+          $CONDA/bin/conda install -c conda-forge affogato --yes --name base
           pip install cython
           pip install -r requirements.txt
           which python
@@ -79,7 +75,7 @@ jobs:
 
       - name: Run test
         run: |
-          $CONDA/bin/conda install pytest
+          $CONDA/bin/conda install pytest --name base
           $CONDA/bin/pytest  -v --color=yes
 
       # # this runs the platform-specific tests declared in tox.ini
