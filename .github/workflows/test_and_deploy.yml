@@ -76,7 +76,12 @@ jobs:
           pip install -r requirements.txt
           which python
           python -c "import gunpowder"
-          pytest -v --color=yes
+          ls $CONDA
+          
+      - name: Run test
+        run: |
+          conda install pytest
+          $CONDA/bin/pytest  -v --color=yes
 
       # # this runs the platform-specific tests declared in tox.ini
       # - name: Test with tox
