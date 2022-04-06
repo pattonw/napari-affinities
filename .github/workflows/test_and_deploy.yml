@@ -69,7 +69,7 @@ jobs:
           $CONDA/bin/conda install -c conda-forge affogato --yes --name base
           $CONDA/bin/python -m pip install cython
           $CONDA/bin/python -m pip install -r requirements.txt
-          python -c "import gunpowder"
+          $CONDA/bin/python -c "import gunpowder"
 
       - name: Run test
         run: |
