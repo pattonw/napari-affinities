@@ -56,6 +56,7 @@ jobs:
         with:
           auto-update-conda: true
           python-version: ${{ matrix.python-version }}
+          activate-environment: napari-aff
       - name: Conda info
         shell: bash -l {0}
         run: conda info
