@@ -62,12 +62,11 @@ jobs:
 
       - name: Install dependencies
         run: |
+          echo $CONDA
+          ls $CONDA
           python -m pip install --upgrade pip
           $CONDA/bin/conda install pytorch cpuonly -c pytorch --yes
-          $CONDA/bin/conda list      
-          which python
           $CONDA/bin/conda list
-          python -c "import sys;print(sys.executable)"
           python -c "import torch"
           $CONDA/bin/conda install -c conda-forge affogato --yes
           pip install cython
