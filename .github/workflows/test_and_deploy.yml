@@ -69,6 +69,7 @@ jobs:
           conda list      
           which python
           conda list
+          conda activate napari-aff
           python -c "import torch"
           conda install -c conda-forge affogato --yes
           pip install cython
