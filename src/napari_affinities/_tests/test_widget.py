@@ -1,10 +1,10 @@
-from napari_affinities.widgets.affinities import (
-    ModelWidget
-)
-from napari_affinities.widgets.mutex_watershed import (
-    mutex_watershed_widget
-)
-import numpy as np
+# from napari_affinities.widgets.affinities import (
+#     ModelWidget
+# )
+# from napari_affinities.widgets.mutex_watershed import (
+#     mutex_watershed_widget
+# )
+# import numpy as np
 
 
 def test_train_affinities_widget(make_napari_viewer, capsys):
