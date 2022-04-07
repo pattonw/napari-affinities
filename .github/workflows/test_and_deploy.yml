@@ -69,6 +69,7 @@ jobs:
           $CONDA/bin/conda install -c conda-forge affogato --yes --name base
           $CONDA/bin/python -m pip install cython
           $CONDA/bin/python -m pip install -r requirements.txt
+          $CONDA/bin/python -m pip install pytest-xvfb
           $CONDA/bin/python -m pip install -e .
           $CONDA/bin/python -c "import gunpowder"
 
