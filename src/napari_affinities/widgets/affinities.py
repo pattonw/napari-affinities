@@ -44,6 +44,9 @@ class ModelWidget(QWidget):
         # initialize state variables
         self.__training_generator = None
 
+        # supported axes
+        self.__axes = ["batch", "channel", "time", "z", "y", "x"]
+
         # Widget layout
         layout = QVBoxLayout()
 
@@ -261,22 +264,56 @@ class ModelWidget(QWidget):
             self.pause_button.setEnabled(False)
 
     def add_layers(self, layers):
-        # Directly modified from napari.utils._magicgui `add_layer_data_tuple_to_viewer`
+        viewer_axis_labels = self.viewer.dims.axis_labels
 
         for data, metadata, layer_type in layers:
             # then try to update the viewer layer with that name.
             name = metadata.pop("name")
-            try:
-                layer = self.viewer.layers[name]
-                layer.data = np.concatenate(
-                    [layer.data.reshape(*(-1, *data.shape[1:])), data], axis=0
+            axes = metadata.pop("axes")
+
+            # handle viewer axes if still default numerics
+            # TODO: Support using xarray axis labels as soon as napari does
+            if len(set(viewer_axis_labels).intersection(set(axes))) == 0:
+                spatial_axes = [
+                    axis for axis in axes if axis not in ["batch", "channel"]
+                ]
+                assert (
+                    len(viewer_axis_labels) - len(spatial_axes) <= 1
+                ), f"Viewer has axes: {viewer_axis_labels}, but we expect ((channels), {spatial_axes})"
+                viewer_axis_labels = (
+                    ("channels", *spatial_axes)
+                    if len(viewer_axis_labels) > len(spatial_axes)
+                    else spatial_axes
                 )
+                self.viewer.dims.axis_labels = viewer_axis_labels
+
+            batch_dim = axes.index("batch") if "batch" in axes else -1
+            sample_shape = data.shape[batch_dim + 1 :]
+
+            try:
+                # add to existing layer
+                layer = self.viewer.layers[name]
+
+                # concatenate along batch dimension
+                layer.data = np.concatenate(
+                    [
+                        layer.data.reshape(*(-1, *sample_shape)),
+                        data.reshape(-1, *sample_shape),
+                    ],
+                    axis=0,
+                )
+
+                # if make first dimension "batch" if it isn't
+                if viewer_axis_labels[0] != "batch":
+                    viewer_axis_labels = ("batch", *viewer_axis_labels)
+                    self.viewer.dims.axis_labels = viewer_axis_labels
+
             except KeyError:  # layer not in the viewer
-                # remove batch_dim if this is the first sample added
+                # TODO: Support defining layer axes as soon as napari does
                 if layer_type == "image":
-                    self.viewer.add_image(data[0], name=name, **metadata)
+                    self.viewer.add_image(data, name=name, **metadata)
                 elif layer_type == "labels":
-                    self.viewer.add_labels(data[0], name=name, **metadata)
+                    self.viewer.add_labels(data, name=name, **metadata)
 
     @thread_worker
     def train_affinities(self, raw, gt, mask, lsds) -> int:
@@ -284,6 +321,11 @@ class ModelWidget(QWidget):
         iteration = 0
         if self.model is None:
             raise ValueError("Please load a model either from your filesystem or a url")
+
+        # constants
+        offsets = self.model.config["mws"]["offsets"]
+        ndim = len(offsets[0])
+        spatial_axes = ["time", "z", "y", "x"][-ndim:]
 
         # extract torch model from bioimageio format
         torch_module = get_torch_module(self.model)
@@ -318,9 +360,6 @@ class ModelWidget(QWidget):
                     checkpoint = f"checkpoints/{iteration}"
                     torch.save(torch_module.state_dict(), Path(checkpoint))
                     self.model.weights["pytorch_state_dict"].source = Path(checkpoint)
-
-                    offsets = self.model.config["mws"]["offsets"]
-                    ndim = len(offsets[0])
 
                     # Assuming raw data comes in with a channel dim
                     # This doesn't have to be the case, in which case
@@ -363,6 +402,10 @@ class ModelWidget(QWidget):
                             {
                                 "name": "Affinities",
                                 "metadata": {"offsets": offsets},
+                                "axes": (
+                                    "channel",
+                                    *spatial_axes,
+                                ),
                             },
                             "image",
                         ),
@@ -407,7 +450,14 @@ class ModelWidget(QWidget):
                         pred_arrays.append(
                             (
                                 aff_pred.detach().cpu().numpy(),
-                                {"name": "sample_aff_pred"},
+                                {
+                                    "name": "sample_aff_pred",
+                                    "axes": (
+                                        "batch",
+                                        "channel",
+                                        *spatial_axes,
+                                    ),
+                                },
                                 "image",
                             )
                         )
@@ -415,7 +465,14 @@ class ModelWidget(QWidget):
                             pred_arrays.append(
                                 (
                                     lsd_pred.detach().cpu().numpy(),
-                                    {"name": "sample_lsd_pred"},
+                                    {
+                                        "name": "sample_lsd_pred",
+                                        "axes": (
+                                            "batch",
+                                            "channel",
+                                            *spatial_axes,
+                                        ),
+                                    },
                                     "image",
                                 )
                             )
