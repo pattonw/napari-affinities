@@ -67,7 +67,6 @@ class ModelWidget(QWidget):
         # Save model to file
         self.save_button = QPushButton("Save model!", self)
         self.save_button.clicked.connect(self.save_model)
-        self.save_button.setEnabled(False)
         layout.addWidget(self.save_button)
 
         # Train widget(Collapsable)
@@ -99,14 +98,11 @@ class ModelWidget(QWidget):
         # add buttons
         self.reset_training_state()
         self.train_button = QPushButton("Train!", self)
-        self.train_button.clicked.connect(self.continue_training)
-        self.train_button.setEnabled(False)
+        self.train_button.clicked.connect(self.train)
         self.pause_button = QPushButton("Pause!", self)
         self.pause_button.clicked.connect(self.pause_training)
-        self.pause_button.setEnabled(False)
         self.snapshot_button = QPushButton("Snapshot!", self)
         self.snapshot_button.clicked.connect(self.snapshot)
-        self.snapshot_button.setEnabled(False)
         collapsable_train_widget.addWidget(self.train_button)
         collapsable_train_widget.addWidget(self.pause_button)
         collapsable_train_widget.addWidget(self.snapshot_button)
@@ -123,7 +119,6 @@ class ModelWidget(QWidget):
         # add buttons
         self.predict_button = QPushButton("Predict!", self)
         self.predict_button.clicked.connect(self.predict)
-        self.predict_button.setEnabled(False)
         collapsable_predict_widget.addWidget(self.predict_button)
 
         layout.addWidget(collapsable_predict_widget)
@@ -133,6 +128,9 @@ class ModelWidget(QWidget):
 
         # Widget state
         self.model = None
+
+        # No buttons should be enabled
+        self.enable_buttons()
 
     @property
     def model(self) -> Optional[Model]:
@@ -150,58 +148,66 @@ class ModelWidget(QWidget):
         self.iterations_widget.setText("None")
         self.loss_widget.setText("nan")
 
+    def enable_buttons(
+        self,
+        train: bool = False,
+        pause: bool = False,
+        snapshot: bool = False,
+        predict: bool = False,
+        save: bool = False,
+    ):
+        self.train_button.setEnabled(train)
+        self.pause_button.setEnabled(pause)
+        self.snapshot_button.setEnabled(snapshot)
+        self.predict_button.setEnabled(predict)
+        self.save_button.setEnabled(save)
+
     @model.setter
     def model(self, new_model: Optional[Model]):
         self.reset_training_state()
         self.__model = new_model
         if new_model is not None:
-            self.train_button.setEnabled(True)
-            self.snapshot_button.setEnabled(True)
             self.model_label.setText(new_model.name)
+            self.enable_buttons(train=True, predict=True, snapshot=True, save=True)
         else:
             self.model_label.setText("None")
 
-    def continue_training(self):
+    def start_training_loop(self):
+        self.__training_generator = self.train_affinities(
+            self.train_widget.raw.value,
+            self.train_widget.gt.value,
+            self.train_widget.mask.value,
+            self.train_widget.lsds.value,
+        )
+        self.__training_generator.yielded.connect(self.on_yield)
+        self.__training_generator.start()
+
+    def train(self):
         if self.__training_generator is None:
-            self.__training_generator = self.train_affinities(
-                self.train_widget.raw.value,
-                self.train_widget.gt.value,
-                self.train_widget.mask.value,
-                self.train_widget.lsds.value,
-            )
-            self.__training_generator.yielded.connect(self.on_yield)
-            self.__training_generator.start()
+            self.start_training_loop()
         else:
             self.__training_generator.resume()
-        self.train_button.setEnabled(False)
-        self.pause_button.setEnabled(True)
-        self.predict_button.setEnabled(True)
+        self.enable_buttons(pause=True, predict=True, snapshot=True, save=True)
 
     def pause_training(self):
         self.__training_generator.pause()
-        self.train_button.setEnabled(True)
-        self.pause_button.setEnabled(False)
-        self.predict_button.setEnabled(True)
+        self.enable_buttons(train=True, predict=True, save=True, snapshot=True)
 
     def snapshot(self):
         if self.__training_generator is None:
-            self.continue_training()
+            self.train()
         self.__training_generator.send("snapshot")
         self.__training_generator.resume()
-        self.train_button.setEnabled(False)
-        self.pause_button.setEnabled(True)
-        self.predict_button.setEnabled(True)
+        self.enable_buttons(pause=True, predict=True, snapshot=True, save=True)
 
     def predict(self):
         if self.__training_generator is None:
-            self.continue_training()
+            self.train()
         self.__training_generator.send(
             self.train_widget.raw.value.data,
         )
         self.__training_generator.resume()
-        self.train_button.setEnabled(False)
-        self.pause_button.setEnabled(True)
-        self.predict_button.setEnabled(True)
+        self.enable_buttons(pause=True, predict=True, snapshot=True, save=True)
 
     def create_train_widget(self, viewer):
         # inputs:
@@ -264,10 +270,6 @@ class ModelWidget(QWidget):
         if iteration is not None and loss is not None:
             self.iterations_widget.setText(f"{iteration}")
             self.loss_widget.setText(f"{loss}")
-        else:
-            self.__training_generator.pause()
-            self.train_button.setEnabled(True)
-            self.pause_button.setEnabled(False)
 
     def add_layers(self, layers):
         viewer_axis_labels = self.viewer.dims.axis_labels
