@@ -64,6 +64,12 @@ class ModelWidget(QWidget):
         model_url_loader.clicked.connect(self.model_from_url)
         layout.addWidget(model_url_loader)
 
+        # Save model to file
+        self.save_button = QPushButton("Save model!", self)
+        self.save_button.clicked.connect(self.save_model)
+        self.save_button.setEnabled(False)
+        layout.addWidget(self.save_button)
+
         # Train widget(Collapsable)
         collapsable_train_widget = QCollapsible("Training: expand for options:", self)
         self.train_widget = self.create_train_widget(napari_viewer)
