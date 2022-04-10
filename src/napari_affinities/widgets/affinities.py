@@ -66,7 +66,7 @@ class ModelWidget(QWidget):
 
         # Save model to file
         self.save_button = QPushButton("Save model!", self)
-        self.save_button.clicked.connect(self.save_model)
+        self.save_button.clicked.connect(self.save)
         layout.addWidget(self.save_button)
 
         # Train widget(Collapsable)
@@ -103,9 +103,15 @@ class ModelWidget(QWidget):
         self.pause_button.clicked.connect(self.pause_training)
         self.snapshot_button = QPushButton("Snapshot!", self)
         self.snapshot_button.clicked.connect(self.snapshot)
+        self.async_predict_button = QPushButton("Predict!", self)
+        self.async_predict_button.clicked.connect(self.async_predict)
+        self.update_button = QPushButton("Update Model!", self)
+        self.update_button.clicked.connect(self.update)
         collapsable_train_widget.addWidget(self.train_button)
         collapsable_train_widget.addWidget(self.pause_button)
         collapsable_train_widget.addWidget(self.snapshot_button)
+        collapsable_train_widget.addWidget(self.async_predict_button)
+        collapsable_train_widget.addWidget(self.update_button)
 
         layout.addWidget(collapsable_train_widget)
 
@@ -180,6 +186,7 @@ class ModelWidget(QWidget):
             self.train_widget.lsds.value,
         )
         self.__training_generator.yielded.connect(self.on_yield)
+        self.__training_generator.returned.connect(self.on_return)
         self.__training_generator.start()
 
     def train(self):
@@ -200,7 +207,7 @@ class ModelWidget(QWidget):
         self.__training_generator.resume()
         self.enable_buttons(pause=True, predict=True, snapshot=True, save=True)
 
-    def predict(self):
+    def async_predict(self):
         if self.__training_generator is None:
             self.train()
         self.__training_generator.send(
@@ -208,6 +215,29 @@ class ModelWidget(QWidget):
         )
         self.__training_generator.resume()
         self.enable_buttons(pause=True, predict=True, snapshot=True, save=True)
+
+    def predict(self):
+        """
+        Predict on data provided through the predict widget. Not necessarily the
+        same as the training data.
+        """
+        raise NotImplementedError()
+
+    def update(self):
+        """
+        End training loop, update loaded model with new weights,
+        reset iterations/loss
+        """
+        if self.__training_generator is None:
+            self.train()
+        self.__training_generator.resume()
+        self.__training_generator.send("stop")
+        self.enable_buttons()
+
+    def save(self):
+        """
+        Save model to file
+        """
 
     def create_train_widget(self, viewer):
         # inputs:
@@ -270,6 +300,12 @@ class ModelWidget(QWidget):
         if iteration is not None and loss is not None:
             self.iterations_widget.setText(f"{iteration}")
             self.loss_widget.setText(f"{loss}")
+
+    def on_return(self, result):
+        """
+        Save model in tmp location, load it, open pop up to save it in new location
+        """
+        raise NotImplementedError()
 
     def add_layers(self, layers):
         viewer_axis_labels = self.viewer.dims.axis_labels
