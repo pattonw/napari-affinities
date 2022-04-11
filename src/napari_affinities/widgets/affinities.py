@@ -139,7 +139,15 @@ class ModelWidget(QWidget):
         self.model = None
 
         # No buttons should be enabled
-        self.enable_buttons()
+        self.disable_buttons(
+            train=True,
+            pause=True,
+            snapshot=True,
+            async_predict=True,
+            update=True,
+            predict=True,
+            save=True,
+        )
 
     @property
     def model(self) -> Optional[Model]:
@@ -157,19 +165,23 @@ class ModelWidget(QWidget):
         self.iterations_widget.setText("None")
         self.loss_widget.setText("nan")
 
-    def enable_buttons(
+    def disable_buttons(
         self,
         train: bool = False,
         pause: bool = False,
         snapshot: bool = False,
+        async_predict: bool = False,
+        update: bool = False,
         predict: bool = False,
         save: bool = False,
     ):
-        self.train_button.setEnabled(train)
-        self.pause_button.setEnabled(pause)
-        self.snapshot_button.setEnabled(snapshot)
-        self.predict_button.setEnabled(predict)
-        self.save_button.setEnabled(save)
+        self.train_button.setEnabled(not train)
+        self.pause_button.setEnabled(not pause)
+        self.snapshot_button.setEnabled(not snapshot)
+        self.async_predict_button.setEnabled(not async_predict)
+        self.update_button.setEnabled(not update)
+        self.predict_button.setEnabled(not predict)
+        self.save_button.setEnabled(not save)
 
     @model.setter
     def model(self, new_model: Optional[Model]):
@@ -177,7 +189,13 @@ class ModelWidget(QWidget):
         self.__model = new_model
         if new_model is not None:
             self.model_label.setText(new_model.name)
-            self.enable_buttons(train=True, predict=True, snapshot=True, save=True)
+            self.disable_buttons(
+                pause=True,
+                snapshot=True,
+                async_predict=True,
+                update=True,
+                save=True,
+            )
         else:
             self.model_label.setText("None")
 
@@ -193,38 +211,95 @@ class ModelWidget(QWidget):
         self.__training_generator.start()
 
     def train(self):
+        self.disable_buttons(
+            train=True,
+        )
         if self.__training_generator is None:
             self.start_training_loop()
         else:
             self.__training_generator.resume()
-        self.enable_buttons(pause=True, predict=True, snapshot=True, save=True)
 
     def pause_training(self):
+        self.disable_buttons(pause=True)
         self.__training_generator.pause()
-        self.enable_buttons(train=True, predict=True, save=True, snapshot=True)
 
     def snapshot(self):
+        self.disable_buttons(train=True)
         if self.__training_generator is None:
             self.train()
         self.__training_generator.send("snapshot")
         self.__training_generator.resume()
-        self.enable_buttons(pause=True, predict=True, snapshot=True, save=True)
 
     def async_predict(self):
+        self.disable_buttons(train=True)
         if self.__training_generator is None:
             self.train()
         self.__training_generator.send(
-            self.train_widget.raw.value.data,
+            "predict",
         )
         self.__training_generator.resume()
-        self.enable_buttons(pause=True, predict=True, snapshot=True, save=True)
+
+    def spatial_dims(self, ndims):
+        return ["time", "z", "y", "x"][-ndims:]
 
     def predict(self):
         """
         Predict on data provided through the predict widget. Not necessarily the
         same as the training data.
         """
-        raise NotImplementedError()
+        offsets = self.model.config["mws"]["offsets"]
+        ndim = len(offsets[0])
+        spatial_axes = self.spatial_dims(ndim)
+        affs = self._predict(self.model, self.predict_widget.raw.value.data[:], offsets)
+        self.add_layers(
+            [
+                (
+                    affs,
+                    {
+                        "name": "Affinities",
+                        "metadata": {"offsets": offsets},
+                        "axes": (
+                            "channel",
+                            *spatial_axes,
+                        ),
+                    },
+                    "image",
+                ),
+            ]
+        )
+
+    def _predict(self, model, raw_data, offsets):
+        ndim = len(offsets[0])
+
+        # add batch and potentially channel dimensions
+        assert len(raw_data.shape) >= ndim, (
+            f"raw data has {len(raw_data.shape)} dimensions but "
+            f"should have {ndim} spatial dimensions"
+        )
+        while len(raw_data.shape) < ndim + 2:
+            raw_data = raw_data.reshape((1, *raw_data.shape))
+
+        with create_prediction_pipeline(bioimageio_model=model) as pp:
+            # [0] to access first input array/output array
+            pred_data = DataArray(raw_data, dims=tuple(pp.input_specs[0].axes))
+            affs = pp(pred_data)[0].values
+
+        # remove batch dimensions
+        pred_data = pred_data.squeeze()
+        affs = affs.squeeze()
+
+        # assert result is as expected
+        assert (
+            pred_data.ndim == ndim
+        ), f"Raw has dims: {pred_data.ndim}, but expected: {ndim}"
+        assert (
+            affs.ndim == ndim + 1
+        ), f"Affs have dims: {affs.ndim}, but expected: {ndim+1}"
+        assert affs.shape[0] == len(offsets), (
+            f"Number of affinity channels ({affs.shape[0]}) "
+            f"does not match number of offsets ({len(offsets)})"
+        )
+        return affs
 
     def update(self):
         """
@@ -235,7 +310,14 @@ class ModelWidget(QWidget):
             self.train()
         self.__training_generator.resume()
         self.__training_generator.send("stop")
-        self.enable_buttons()
+        self.disable_buttons(
+            pause=True,
+            snapshot=True,
+            async_predict=True,
+            update=True,
+            save=True,
+        )
+        self.reset_training_state()
 
     def save(self):
         """
@@ -336,7 +418,7 @@ class ModelWidget(QWidget):
         # inputs:
         raw = layer_choice_widget(
             viewer,
-            annotation=napari.types.ImageData,
+            annotation=napari.layers.Image,
             name="raw",
         )
 
@@ -374,11 +456,12 @@ class ModelWidget(QWidget):
             self.iterations_widget.setText(f"{iteration}")
             self.loss_widget.setText(f"{loss}")
 
-    def on_return(self, result):
+    def on_return(self, weights_path: Path):
         """
-        Save model in tmp location, load it, open pop up to save it in new location
+        Update model to use provided returned weights
         """
-        raise NotImplementedError()
+        self.model.weights["pytorch_state_dict"].source = weights_path
+        self.reset_training_state()
 
     def add_layers(self, layers):
         viewer_axis_labels = self.viewer.dims.axis_labels
@@ -439,13 +522,15 @@ class ModelWidget(QWidget):
         if self.model is None:
             raise ValueError("Please load a model either from your filesystem or a url")
 
+        model = deepcopy(self.model)
+
         # constants
-        offsets = self.model.config["mws"]["offsets"]
+        offsets = model.config["mws"]["offsets"]
         ndim = len(offsets[0])
-        spatial_axes = ["time", "z", "y", "x"][-ndim:]
+        spatial_axes = self.spatial_dims(ndim)
 
         # extract torch model from bioimageio format
-        torch_module = get_torch_module(self.model)
+        torch_module = get_torch_module(model)
 
         # define Loss function and Optimizer TODO: make options available as choices?
         lsd_loss_func = torch.nn.MSELoss()
@@ -458,25 +543,24 @@ class ModelWidget(QWidget):
         torch_module = torch_module.to(device)
         torch_module.train()
 
+        # prepare data for full volume prediction
+        raw_data = raw.data
+        # add batch dimension
+        raw_data = raw_data.reshape((1, *raw_data.shape))
+
         # Train loop:
         with self.build_pipeline(raw, gt, mask, lsds) as pipeline:
             iteration = 0
             loss = float("nan")
             mode = yield (iteration, loss)
             while True:
-                if mode is None or mode == "snapshot":
-                    predict = False
-                    snapshot_iteration = mode is not None
-                elif isinstance(mode, np.ndarray):
-                    predict = True
-                    pred_data = mode
-                else:
-                    raise Exception(f"Uknown mode: {mode}")
 
-                if predict:
-                    checkpoint = f"checkpoints/{iteration}"
-                    torch.save(torch_module.state_dict(), Path(checkpoint))
-                    self.model.weights["pytorch_state_dict"].source = Path(checkpoint)
+                if mode == "predict":
+                    checkpoint = Path(f"/tmp/checkpoints/{iteration}.pt")
+                    if not checkpoint.parent.exists():
+                        checkpoint.parent.mkdir(parents=True)
+                    torch.save(torch_module.state_dict(), checkpoint)
+                    model.weights["pytorch_state_dict"].source = checkpoint
 
                     # Assuming raw data comes in with a channel dim
                     # This doesn't have to be the case, in which case
@@ -484,31 +568,7 @@ class ModelWidget(QWidget):
                     # TODO: How to determine axes of raw data. metadata?
                     # guess? simply make it fit what the model expects?
 
-                    # add batch dimension
-                    pred_data = pred_data.reshape((1, *pred_data.shape))
-
-                    with create_prediction_pipeline(bioimageio_model=self.model) as pp:
-                        # [0] to access first input array/output array
-                        pred_data = DataArray(
-                            pred_data, dims=tuple(pp.input_specs[0].axes)
-                        )
-                        affs = pp(pred_data)[0].values
-
-                    # remove batch dimensions
-                    pred_data = pred_data.squeeze()
-                    affs = affs.squeeze()
-
-                    # assert result is as expected
-                    assert (
-                        pred_data.ndim == ndim
-                    ), f"Raw has dims: {pred_data.ndim}, but expected: {ndim}"
-                    assert (
-                        affs.ndim == ndim + 1
-                    ), f"Affs have dims: {affs.ndim}, but expected: {ndim+1}"
-                    assert affs.shape[0] == len(offsets), (
-                        f"Number of affinity channels ({affs.shape[0]}) "
-                        f"does not match number of offsets ({len(offsets)})"
-                    )
+                    affs = self._predict(model, raw_data, offsets)
 
                     # Generate affinities and keep the offsets as metadata
                     mode = yield (
@@ -527,7 +587,8 @@ class ModelWidget(QWidget):
                             "image",
                         ),
                     )
-                else:
+                elif mode is None or mode == "snapshot":
+                    snapshot_iteration = mode == "snapshot"
 
                     # fetch data:
                     arrays, snapshot_arrays = pipeline.next(snapshot_iteration)
@@ -602,3 +663,13 @@ class ModelWidget(QWidget):
                         )
                     else:
                         mode = yield (iteration, loss)
+                elif mode == "stop":
+                    checkpoint = Path(f"/tmp/checkpoints/{iteration}.pt")
+                    if not checkpoint.parent.exists():
+                        checkpoint.parent.mkdir(parents=True)
+                    torch.save(torch_module.state_dict(), checkpoint)
+                    return checkpoint
+                else:
+                    raise ValueError(
+                        f"Unknown message passed to train worker: ({mode})"
+                    )
