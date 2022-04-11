@@ -366,11 +366,15 @@ class ModelWidget(QWidget):
             for citation in self.model.cite
         ]
         authors = [dataclasses.asdict(author) for author in self.model.authors]
-        if self.save_widget.author.value is not None:
+        if (
+            self.save_widget.author.value is not None
+            and len(self.save_widget.author.value) > 0
+        ):
             authors += [{"name": self.save_widget.author.value}]
         name = (
-            self.save_widget.model_name
-            if self.save_widget.model_name is not None
+            self.save_widget.model_name.value
+            if self.save_widget.model_name.value is not None
+            and len(self.save_widget.model_name.value) > 0
             else self.model.name
         )
 
