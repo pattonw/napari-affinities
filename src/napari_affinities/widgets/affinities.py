@@ -354,6 +354,7 @@ class ModelWidget(QWidget):
             filenames = dlg.selectedFiles()
             model_file = Path(filenames[0])
 
+            self.__rdf = model_file
             self.model = bioimageio.core.load_resource_description(model_file)
 
     def model_from_url(self):
@@ -362,6 +363,7 @@ class ModelWidget(QWidget):
             self, "Url Input Dialog", "Url for model rdf.yaml folder:"
         )
         if ok:
+            self.__rdf = url
             self.model = bioimageio.core.load_resource_description(url)
 
     def on_yield(self, step_data):
