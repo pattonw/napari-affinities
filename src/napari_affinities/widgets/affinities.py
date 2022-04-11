@@ -67,11 +67,6 @@ class ModelWidget(QWidget):
         model_url_loader.clicked.connect(self.model_from_url)
         layout.addWidget(model_url_loader)
 
-        # Save model to file
-        self.save_button = QPushButton("Save model!", self)
-        self.save_button.clicked.connect(self.save)
-        layout.addWidget(self.save_button)
-
         # Train widget(Collapsable)
         collapsable_train_widget = QCollapsible("Training: expand for options:", self)
         self.train_widget = self.create_train_widget(napari_viewer)
@@ -131,6 +126,18 @@ class ModelWidget(QWidget):
         collapsable_predict_widget.addWidget(self.predict_button)
 
         layout.addWidget(collapsable_predict_widget)
+
+        # Save widget(Collapsable)
+        collapsable_save_widget = QCollapsible("Save Model: expand for options:", self)
+        self.save_widget = self.create_save_widget(napari_viewer)
+        collapsable_save_widget.addWidget(self.save_widget.native)
+
+        # add buttons
+        self.save_button = QPushButton("save!", self)
+        self.save_button.clicked.connect(self.save)
+        collapsable_save_widget.addWidget(self.save_button)
+
+        layout.addWidget(collapsable_save_widget)
 
         # activate layout
         self.setLayout(layout)
@@ -194,7 +201,6 @@ class ModelWidget(QWidget):
                 snapshot=True,
                 async_predict=True,
                 update=True,
-                save=True,
             )
         else:
             self.model_label.setText("None")
@@ -315,7 +321,6 @@ class ModelWidget(QWidget):
             snapshot=True,
             async_predict=True,
             update=True,
-            save=True,
         )
         self.reset_training_state()
 
@@ -343,7 +348,7 @@ class ModelWidget(QWidget):
             return f"{source_file}:{class_name}"
 
         # the path to save the new model with torchscript weights
-        zip_path = f"saved_model.zip"
+        zip_path = self.save_widget.filename.value
 
         preprocessing = [
             [{"name": prep.name, "kwargs": prep.kwargs} for prep in inp.preprocessing]
@@ -360,6 +365,14 @@ class ModelWidget(QWidget):
             {k: v for k, v in dataclasses.asdict(citation).items() if v != missing}
             for citation in self.model.cite
         ]
+        authors = [dataclasses.asdict(author) for author in self.model.authors]
+        if self.save_widget.author.value is not None:
+            authors += [{"name": self.save_widget.author.value}]
+        name = (
+            self.save_widget.model_name
+            if self.save_widget.model_name is not None
+            else self.model.name
+        )
 
         kwargs = {
             "weight_uri": self.model.weights["pytorch_state_dict"].source,
@@ -370,9 +383,9 @@ class ModelWidget(QWidget):
             "input_step": [inp.shape.step for inp in self.model.inputs],
             "output_axes": ["".join(outp.axes) for outp in self.model.outputs],
             "output_path": zip_path,
-            "name": self.model.name,
+            "name": name,
             "description": f"{self.model.description}\nFinetuned with the napari-affinities plugin!",
-            "authors": [dataclasses.asdict(author) for author in self.model.authors],
+            "authors": authors,
             "license": self.model.license,
             "documentation": self.model.documentation,
             "covers": self.model.covers,
@@ -425,6 +438,17 @@ class ModelWidget(QWidget):
         predict_widget = Container(widgets=[raw])
 
         return predict_widget
+
+    def create_save_widget(self, viewer):
+        # inputs:
+        filename = create_widget(
+            annotation=Path, name="filename", options={"mode": "w"}
+        )
+        author = create_widget(annotation=Optional[str], name="author")
+        model_name = create_widget(annotation=Optional[str], name="model_name")
+        save_widget = Container(widgets=[filename, author, model_name])
+
+        return save_widget
 
     def model_from_file(self):
         dlg = QFileDialog()
