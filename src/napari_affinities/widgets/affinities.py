@@ -349,6 +349,7 @@ class ModelWidget(QWidget):
 
         # the path to save the new model with torchscript weights
         zip_path = self.save_widget.filename.value
+        assert zip_path.name.endswith(".zip"), "Must save model in a zip"
 
         preprocessing = [
             [{"name": prep.name, "kwargs": prep.kwargs} for prep in inp.preprocessing]
