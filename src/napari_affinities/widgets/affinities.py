@@ -1,4 +1,5 @@
 # local package imports
+from copy import deepcopy
 from ..gp.pipeline import build_pipeline
 from .gui_helpers import layer_choice_widget
 from ..bioimageio.helpers import get_torch_module
@@ -11,6 +12,7 @@ import napari
 from napari.qt.threading import thread_worker
 from magicgui.widgets import create_widget, Container
 import bioimageio.core
+from bioimageio.core.build_spec import build_model
 from bioimageio.core.resource_io.nodes import Model
 from bioimageio.core.prediction_pipeline import create_prediction_pipeline
 from marshmallow import missing
@@ -33,6 +35,7 @@ from qtpy.QtWidgets import (
 from pathlib import Path
 from typing import Optional, Dict, List
 from contextlib import contextmanager
+import dataclasses
 
 
 class ModelWidget(QWidget):
@@ -238,6 +241,74 @@ class ModelWidget(QWidget):
         """
         Save model to file
         """
+
+        # get architecture source
+        def get_architecture_source():
+            raw_resource = bioimageio.core.load_raw_resource_description(self.__rdf)
+            model_source = raw_resource.weights["pytorch_state_dict"].architecture
+            # download the source file if necessary
+            source_file = bioimageio.core.resource_io.utils.resolve_source(
+                model_source.source_file
+            )
+            # if the source file path does not exist, try combining it with the root path of the model
+            if not Path(source_file).exists():
+                source_file = Path(
+                    raw_resource.root_path,
+                    Path(source_file).relative_to(Path(".").absolute()),
+                )
+            assert Path(source_file).exists(), source_file
+            class_name = model_source.callable_name
+            return f"{source_file}:{class_name}"
+
+        # the path to save the new model with torchscript weights
+        zip_path = f"saved_model.zip"
+
+        preprocessing = [
+            [{"name": prep.name, "kwargs": prep.kwargs} for prep in inp.preprocessing]
+            for inp in self.model.inputs
+            if inp.preprocessing != missing
+        ]
+        postprocessing = [
+            [{"name": post.name, "kwargs": post.kwargs} for post in outp.postprocessing]
+            if outp.postprocessing != missing
+            else None
+            for outp in self.model.outputs
+        ]
+        citations = [
+            {k: v for k, v in dataclasses.asdict(citation).items() if v != missing}
+            for citation in self.model.cite
+        ]
+
+        kwargs = {
+            "weight_uri": self.model.weights["pytorch_state_dict"].source,
+            "test_inputs": self.model.test_inputs,
+            "test_outputs": self.model.test_outputs,
+            "input_axes": ["".join(inp.axes) for inp in self.model.inputs],
+            "input_min_shape": [inp.shape.min for inp in self.model.inputs],
+            "input_step": [inp.shape.step for inp in self.model.inputs],
+            "output_axes": ["".join(outp.axes) for outp in self.model.outputs],
+            "output_path": zip_path,
+            "name": self.model.name,
+            "description": f"{self.model.description}\nFinetuned with the napari-affinities plugin!",
+            "authors": [dataclasses.asdict(author) for author in self.model.authors],
+            "license": self.model.license,
+            "documentation": self.model.documentation,
+            "covers": self.model.covers,
+            "tags": self.model.tags,
+            "cite": citations,
+            "parent": self.model.parent,
+            "architecture": get_architecture_source(),
+            "model_kwargs": self.model.weights["pytorch_state_dict"].kwargs,
+            "preprocessing": preprocessing,
+            "postprocessing": postprocessing,
+            "training_data": self.model.training_data
+            if self.model.training_data != missing
+            else None,
+            "config": self.model.config,
+        }
+
+        # build the model! it will be saved to 'zip_path'
+        new_model_raw = build_model(**kwargs)
 
     def create_train_widget(self, viewer):
         # inputs:
