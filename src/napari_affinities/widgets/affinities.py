@@ -94,22 +94,15 @@ class ModelWidget(QWidget):
         collapsable_train_widget.addWidget(loss_frame)
 
         # add buttons
-        self.reset_training_state()
         self.train_button = QPushButton("Train!", self)
         self.train_button.clicked.connect(self.train)
-        self.pause_button = QPushButton("Pause!", self)
-        self.pause_button.clicked.connect(self.pause_training)
         self.snapshot_button = QPushButton("Snapshot!", self)
         self.snapshot_button.clicked.connect(self.snapshot)
         self.async_predict_button = QPushButton("Predict!", self)
         self.async_predict_button.clicked.connect(self.async_predict)
-        self.update_button = QPushButton("Update Model!", self)
-        self.update_button.clicked.connect(self.update)
         collapsable_train_widget.addWidget(self.train_button)
-        collapsable_train_widget.addWidget(self.pause_button)
         collapsable_train_widget.addWidget(self.snapshot_button)
         collapsable_train_widget.addWidget(self.async_predict_button)
-        collapsable_train_widget.addWidget(self.update_button)
 
         layout.addWidget(collapsable_train_widget)
 
@@ -148,10 +141,8 @@ class ModelWidget(QWidget):
         # No buttons should be enabled
         self.disable_buttons(
             train=True,
-            pause=True,
             snapshot=True,
             async_predict=True,
-            update=True,
             predict=True,
             save=True,
         )
@@ -165,28 +156,26 @@ class ModelWidget(QWidget):
         with build_pipeline(raw, gt, mask, lsds, self.model) as pipeline:
             yield pipeline
 
-    def reset_training_state(self):
+    def reset_training_state(self, keep_stats=False):
         if self.__training_generator is not None:
             self.__training_generator.quit()
         self.__training_generator = None
-        self.iterations_widget.setText("None")
-        self.loss_widget.setText("nan")
+        if not keep_stats:
+            self.iteration = 0
+            self.iterations_widget.setText("None")
+            self.loss_widget.setText("nan")
 
     def disable_buttons(
         self,
         train: bool = False,
-        pause: bool = False,
         snapshot: bool = False,
         async_predict: bool = False,
-        update: bool = False,
         predict: bool = False,
         save: bool = False,
     ):
         self.train_button.setEnabled(not train)
-        self.pause_button.setEnabled(not pause)
         self.snapshot_button.setEnabled(not snapshot)
         self.async_predict_button.setEnabled(not async_predict)
-        self.update_button.setEnabled(not update)
         self.predict_button.setEnabled(not predict)
         self.save_button.setEnabled(not save)
 
@@ -197,53 +186,60 @@ class ModelWidget(QWidget):
         if new_model is not None:
             self.model_label.setText(new_model.name)
             self.disable_buttons(
-                pause=True,
                 snapshot=True,
                 async_predict=True,
-                update=True,
             )
         else:
             self.model_label.setText("None")
 
     def start_training_loop(self):
+        print(self.iteration)
         self.__training_generator = self.train_affinities(
             self.train_widget.raw.value,
             self.train_widget.gt.value,
             self.train_widget.mask.value,
             self.train_widget.lsds.value,
+            iteration=self.iteration,
         )
         self.__training_generator.yielded.connect(self.on_yield)
         self.__training_generator.returned.connect(self.on_return)
         self.__training_generator.start()
 
+        # all buttons are enabled while the training loop is running
+        self.disable_buttons()
+
     def train(self):
-        self.disable_buttons(
-            train=True,
-        )
+        self.training = not self.training
+
+    @property
+    def training(self):
+        try:
+            return self.__training
+        except AttributeError:
+            return False
+
+    @training.setter
+    def training(self, training: bool):
+        self.__training = training
         if self.__training_generator is None:
             self.start_training_loop()
-        else:
+        if training:
             self.__training_generator.resume()
-
-    def pause_training(self):
-        self.disable_buttons(pause=True)
-        self.__training_generator.pause()
+            self.train_button.setText("Pause!")
+            self.disable_buttons(snapshot=True, async_predict=True)
+        else:
+            self.__training_generator.send("stop")
+            self.train_button.setText("Train!")
 
     def snapshot(self):
-        self.disable_buttons(train=True)
-        if self.__training_generator is None:
-            self.train()
         self.__training_generator.send("snapshot")
-        self.__training_generator.resume()
+        self.training = True
 
     def async_predict(self):
-        self.disable_buttons(train=True)
-        if self.__training_generator is None:
-            self.train()
         self.__training_generator.send(
             "predict",
         )
-        self.__training_generator.resume()
+        self.training = True
 
     def spatial_dims(self, ndims):
         return ["time", "z", "y", "x"][-ndims:]
@@ -285,6 +281,7 @@ class ModelWidget(QWidget):
         while len(raw_data.shape) < ndim + 2:
             raw_data = raw_data.reshape((1, *raw_data.shape))
 
+        print("Predicting with weights: ", model.weights["pytorch_state_dict"].source)
         with create_prediction_pipeline(bioimageio_model=model) as pp:
             # [0] to access first input array/output array
             pred_data = DataArray(raw_data, dims=tuple(pp.input_specs[0].axes))
@@ -306,23 +303,6 @@ class ModelWidget(QWidget):
             f"does not match number of offsets ({len(offsets)})"
         )
         return affs
-
-    def update(self):
-        """
-        End training loop, update loaded model with new weights,
-        reset iterations/loss
-        """
-        if self.__training_generator is None:
-            self.train()
-        self.__training_generator.resume()
-        self.__training_generator.send("stop")
-        self.disable_buttons(
-            pause=True,
-            snapshot=True,
-            async_predict=True,
-            update=True,
-        )
-        self.reset_training_state()
 
     def save(self):
         """
@@ -482,6 +462,7 @@ class ModelWidget(QWidget):
         if len(layers) > 0:
             self.add_layers(layers)
         if iteration is not None and loss is not None:
+            self.iteration = iteration
             self.iterations_widget.setText(f"{iteration}")
             self.loss_widget.setText(f"{loss}")
 
@@ -490,7 +471,7 @@ class ModelWidget(QWidget):
         Update model to use provided returned weights
         """
         self.model.weights["pytorch_state_dict"].source = weights_path
-        self.reset_training_state()
+        self.reset_training_state(keep_stats=True)
 
     def add_layers(self, layers):
         viewer_axis_labels = self.viewer.dims.axis_labels
@@ -545,9 +526,8 @@ class ModelWidget(QWidget):
                     self.viewer.add_labels(data, name=name, **metadata)
 
     @thread_worker
-    def train_affinities(self, raw, gt, mask, lsds) -> int:
+    def train_affinities(self, raw, gt, mask, lsds, iteration=0) -> int:
 
-        iteration = 0
         if self.model is None:
             raise ValueError("Please load a model either from your filesystem or a url")
 
@@ -579,7 +559,6 @@ class ModelWidget(QWidget):
 
         # Train loop:
         with self.build_pipeline(raw, gt, mask, lsds) as pipeline:
-            iteration = 0
             loss = float("nan")
             mode = yield (iteration, loss)
             while True:
