@@ -98,7 +98,7 @@ class ModelWidget(QWidget):
         self.train_button.clicked.connect(self.train)
         self.snapshot_button = QPushButton("Snapshot!", self)
         self.snapshot_button.clicked.connect(self.snapshot)
-        self.async_predict_button = QPushButton("Predict!", self)
+        self.async_predict_button = QPushButton("Predict(online)!", self)
         self.async_predict_button.clicked.connect(self.async_predict)
         collapsable_train_widget.addWidget(self.train_button)
         collapsable_train_widget.addWidget(self.snapshot_button)
