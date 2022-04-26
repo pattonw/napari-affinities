@@ -64,7 +64,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          $CONDA/bin/conda clean --source-cache
+          $CONDA/bin/conda build purge-all
           $CONDA/bin/conda install pytorch cpuonly -c pytorch --yes --name base
           $CONDA/bin/conda list
           $CONDA/bin/python -c "import torch"
