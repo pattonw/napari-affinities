@@ -24,11 +24,13 @@ class PipelineDataGenerator:
         request: gp.BatchRequest,
         snapshot_request: gp.BatchRequest,
         keys: List[Tuple[gp.ArrayKey, str]],
+        axes: Tuple[str],
     ):
         self.pipeline = pipeline
         self.request = request
         self.snapshot_request = snapshot_request
         self.keys = keys
+        self.spatial_axes = axes
 
     def next(self, snapshot: bool) -> List[Tuple[np.ndarray, LayerName, LayerType]]:
         request = gp.BatchRequest()
@@ -41,7 +43,14 @@ class PipelineDataGenerator:
         snapshot_arrays = []
         for key, layer_type in self.keys:
             if key in request_template:
-                layer = (batch[key].data, {"name": f"sample_{key}".lower()}, layer_type)
+                layer = (
+                    batch[key].data,
+                    {
+                        "name": f"sample_{key}".lower(),
+                        "axes": ("batch", "channel", *self.spatial_axes),
+                    },
+                    layer_type,
+                )
                 if key in self.request:
                     arrays.append(layer)
                 else:
@@ -63,6 +72,8 @@ def build_pipeline(
     # read metadata from model
     offsets = model.config["mws"]["offsets"]
     dims = len(offsets[0])
+    spatial_axes = ["time", "z", "y", "x"][-dims:]
+
     input_shape = gp.Coordinate(model.inputs[0].shape.min[-dims:])
     output_shape = gp.Coordinate(input_shape)
 
@@ -167,4 +178,6 @@ def build_pipeline(
     ]
 
     with gp.build(pipeline):
-        yield PipelineDataGenerator(pipeline, request, snapshot_request, keys)
+        yield PipelineDataGenerator(
+            pipeline, request, snapshot_request, keys, axes=spatial_axes
+        )
