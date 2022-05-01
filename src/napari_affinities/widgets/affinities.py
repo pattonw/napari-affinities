@@ -261,7 +261,7 @@ class ModelWidget(QWidget):
                     affs,
                     {
                         "name": "Affinities",
-                        "metadata": {"offsets": offsets},
+                        "metadata": {"offsets": offsets, "overwrite": True},
                         "axes": (
                             "channel",
                             *spatial_axes,
@@ -489,6 +489,7 @@ class ModelWidget(QWidget):
             # then try to update the viewer layer with that name.
             name = metadata.pop("name")
             axes = metadata.pop("axes")
+            overwrite = metadata.pop("overwrite", False)
 
             # handle viewer axes if still default numerics
             # TODO: Support using xarray axis labels as soon as napari does
@@ -514,16 +515,19 @@ class ModelWidget(QWidget):
                 layer = self.viewer.layers[name]
 
                 # concatenate along batch dimension
-                layer.data = np.concatenate(
-                    [
-                        layer.data.reshape(*(-1, *sample_shape)),
-                        data.reshape(-1, *sample_shape),
-                    ],
-                    axis=0,
-                )
+                if overwrite:
+                    layer.data = data.reshape(*sample_shape)
+                else:
+                    layer.data = np.concatenate(
+                        [
+                            layer.data.reshape(*(-1, *sample_shape)),
+                            data.reshape(-1, *sample_shape),
+                        ],
+                        axis=0,
+                    )
 
-                # if make first dimension "batch" if it isn't
-                if viewer_axis_labels[0] != "batch":
+                # make first dimension "batch" if it isn't
+                if not overwrite and viewer_axis_labels[0] != "batch":
                     viewer_axis_labels = ("batch", *viewer_axis_labels)
                     self.viewer.dims.axis_labels = viewer_axis_labels
 
