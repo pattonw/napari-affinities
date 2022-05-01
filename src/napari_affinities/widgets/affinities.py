@@ -598,7 +598,7 @@ class ModelWidget(QWidget):
                         (
                             affs,
                             {
-                                "name": "Affinities",
+                                "name": "Affinities(online)",
                                 "metadata": {"offsets": offsets},
                                 "axes": (
                                     "channel",
