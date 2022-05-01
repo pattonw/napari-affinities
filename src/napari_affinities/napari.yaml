@@ -2,15 +2,6 @@ name: napari-affinities
 display_name: napari Affinities
 contributions:
   commands:
-    - id: napari-affinities.get_reader
-      python_name: napari_affinities._reader:napari_get_reader
-      title: Open data with napari Affinities
-    - id: napari-affinities.write_multiple
-      python_name: napari_affinities._writer:write_multiple
-      title: Save multi-layer data with napari Affinities
-    - id: napari-affinities.write_single_image
-      python_name: napari_affinities._writer:write_single_image
-      title: Save image data with napari Affinities
     - id: napari-affinities.make_mutex_watershed_widget
       python_name: napari_affinities.widgets.mutex_watershed:mutex_watershed_widget
       title: Make mutex watershed widget
@@ -20,17 +11,6 @@ contributions:
     - id: napari-affinities.sample_epithelial
       python_name: napari_affinities.sample_data:sample_epithelial
       title: Load sample data from napari Affinities
-  readers:
-    - command: napari-affinities.get_reader
-      accepts_directories: false
-      filename_patterns: ['*.npy'] 
-  writers:
-    - command: napari-affinities.write_multiple
-      layer_types: ['image*','labels*']
-      filename_extensions: []
-    - command: napari-affinities.write_single_image
-      layer_types: ['image']
-      filename_extensions: ['.npy'] 
   sample_data:
     - command: napari-affinities.sample_epithelial
       display_name: Epithelial sample
