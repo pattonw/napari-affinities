@@ -221,15 +221,17 @@ class ModelWidget(QWidget):
     @training.setter
     def training(self, training: bool):
         self.__training = training
+        if training:
         if self.__training_generator is None:
             self.start_training_loop()
-        if training:
             self.__training_generator.resume()
             self.train_button.setText("Pause!")
-            self.disable_buttons(snapshot=True, async_predict=True)
+            self.disable_buttons()
         else:
+            if self.__training_generator is not None:
             self.__training_generator.send("stop")
             self.train_button.setText("Train!")
+            self.disable_buttons(snapshot=True, async_predict=True)
 
     def snapshot(self):
         self.__training_generator.send("snapshot")
