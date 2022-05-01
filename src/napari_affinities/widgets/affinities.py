@@ -10,7 +10,7 @@ import gunpowder as gp
 # pip installed libraries
 import napari
 from napari.qt.threading import thread_worker
-from magicgui.widgets import create_widget, Container
+from magicgui.widgets import create_widget, Container, Label
 import bioimageio.core
 from bioimageio.core.build_spec import build_model
 from bioimageio.core.resource_io.nodes import Model
@@ -193,12 +193,11 @@ class ModelWidget(QWidget):
             self.model_label.setText("None")
 
     def start_training_loop(self):
-        print(self.iteration)
         self.__training_generator = self.train_affinities(
             self.train_widget.raw.value,
             self.train_widget.gt.value,
             self.train_widget.mask.value,
-            self.train_widget.lsds.value,
+            # self.train_widget.lsds.value,
             iteration=self.iteration,
         )
         self.__training_generator.yielded.connect(self.on_yield)
@@ -222,14 +221,14 @@ class ModelWidget(QWidget):
     def training(self, training: bool):
         self.__training = training
         if training:
-        if self.__training_generator is None:
-            self.start_training_loop()
+            if self.__training_generator is None:
+                self.start_training_loop()
             self.__training_generator.resume()
             self.train_button.setText("Pause!")
             self.disable_buttons()
         else:
             if self.__training_generator is not None:
-            self.__training_generator.send("stop")
+                self.__training_generator.send("stop")
             self.train_button.setText("Train!")
             self.disable_buttons(snapshot=True, async_predict=True)
 
@@ -403,12 +402,18 @@ class ModelWidget(QWidget):
         mask = layer_choice_widget(
             viewer, annotation=Optional[napari.layers.Labels], name="mask"
         )
-        lsds = create_widget(
+        lsd_label = Label(
+            name="lsd_label",
+            label='<a href="https://localshapedescriptors.github.io"><font color=white>LSDs</font></a>',
+        )
+        use_lsds = create_widget(
             annotation=bool,
             name="lsds",
-            label='<a href="https://localshapedescriptors.github.io"><font color=white>LSDs</font></a>',
+            label="use LSDs",
             value=False,
         )
+        sigma = create_widget(annotation=float, name="sigma", label="sigma", value=0)
+        lsds = Container(widgets=[lsd_label, use_lsds, sigma], name="lsds")
 
         train_widget = Container(widgets=[raw, gt, mask, lsds])
 
@@ -528,7 +533,7 @@ class ModelWidget(QWidget):
                     self.viewer.add_labels(data, name=name, **metadata)
 
     @thread_worker
-    def train_affinities(self, raw, gt, mask, lsds, iteration=0) -> int:
+    def train_affinities(self, raw, gt, mask, lsds=False, iteration=0) -> int:
 
         if self.model is None:
             raise ValueError("Please load a model either from your filesystem or a url")
