@@ -151,6 +151,42 @@ class ModelWidget(QWidget):
     def model(self) -> Optional[Model]:
         return self.__model
 
+    @model.setter
+    def model(self, new_model: Optional[Model]):
+        self.reset_training_state()
+        self.__model = new_model
+        if new_model is not None:
+            self.model_label.setText(new_model.name)
+            self.disable_buttons(
+                snapshot=True,
+                async_predict=True,
+            )
+        else:
+            self.model_label.setText("None")
+
+    @property
+    def training(self) -> bool:
+        try:
+            return self.__training
+        except AttributeError:
+            return False
+
+    @training.setter
+    def training(self, training: bool):
+        self.__training = training
+        if training:
+            if self.__training_generator is None:
+                self.start_training_loop()
+            assert self.__training_generator is not None
+            self.__training_generator.resume()
+            self.train_button.setText("Pause!")
+            self.disable_buttons()
+        else:
+            if self.__training_generator is not None:
+                self.__training_generator.send("stop")
+            self.train_button.setText("Train!")
+            self.disable_buttons(snapshot=True, async_predict=True)
+
     @contextmanager
     def build_pipeline(self, raw, gt, mask, lsds):
         with build_pipeline(raw, gt, mask, lsds, self.model) as pipeline:
@@ -179,19 +215,6 @@ class ModelWidget(QWidget):
         self.predict_button.setEnabled(not predict)
         self.save_button.setEnabled(not save)
 
-    @model.setter
-    def model(self, new_model: Optional[Model]):
-        self.reset_training_state()
-        self.__model = new_model
-        if new_model is not None:
-            self.model_label.setText(new_model.name)
-            self.disable_buttons(
-                snapshot=True,
-                async_predict=True,
-            )
-        else:
-            self.model_label.setText("None")
-
     def start_training_loop(self):
         self.__training_generator = self.train_affinities(
             self.train_widget.raw.value,
@@ -209,28 +232,6 @@ class ModelWidget(QWidget):
 
     def train(self):
         self.training = not self.training
-
-    @property
-    def training(self):
-        try:
-            return self.__training
-        except AttributeError:
-            return False
-
-    @training.setter
-    def training(self, training: bool):
-        self.__training = training
-        if training:
-            if self.__training_generator is None:
-                self.start_training_loop()
-            self.__training_generator.resume()
-            self.train_button.setText("Pause!")
-            self.disable_buttons()
-        else:
-            if self.__training_generator is not None:
-                self.__training_generator.send("stop")
-            self.train_button.setText("Train!")
-            self.disable_buttons(snapshot=True, async_predict=True)
 
     def snapshot(self):
         self.__training_generator.send("snapshot")
@@ -477,6 +478,7 @@ class ModelWidget(QWidget):
         """
         Update model to use provided returned weights
         """
+        assert self.model is not None
         self.model.weights["pytorch_state_dict"].source = weights_path
         self.reset_training_state(keep_stats=True)
 
@@ -533,7 +535,7 @@ class ModelWidget(QWidget):
                     self.viewer.add_labels(data, name=name, **metadata)
 
     @thread_worker
-    def train_affinities(self, raw, gt, mask, lsds=False, iteration=0) -> int:
+    def train_affinities(self, raw, gt, mask, lsds=False, iteration=0):
 
         if self.model is None:
             raise ValueError("Please load a model either from your filesystem or a url")
