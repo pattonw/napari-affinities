@@ -1,3 +1,4 @@
+from pytest import param
 from .nodes import NapariImageSource, NapariLabelsSource, OnesSource
 
 import gunpowder as gp
@@ -9,6 +10,7 @@ from bioimageio.core.resource_io.nodes import Model
 from contextlib import contextmanager
 from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass
+import math
 
 LayerName = str
 LayerType = str
@@ -22,9 +24,11 @@ class GunpowderParameters:
     intensity_shift_min: float = -0.5
     intensity_shift_max: float = 0.5
     gausian_noise_mean: float = 0.0
-    gausian_noise_std: float = 0.2
+    gausian_noise_var: float = 0.2
     elastic_control_point_spacing: int = 50
     elastic_control_point_sigma: int = 10
+    zoom_min: float = 0.8
+    zoom_max: float = 1.2
     rotation: bool = True
     mirror: bool = True
     transpose: bool = True
@@ -138,6 +142,22 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
     )
 
     # TODO: add augments
+    if parameters.mirror or parameters.transpose:
+        pipeline += gp.SimpleAugment(
+            mirror_only=[1 if parameters.mirror else 0 for _ in range(dims)],
+            transpose_only=[1 if parameters.transpose else 0 for _ in range(dims)],
+        )
+    pipeline += gp.ElasticAugment(
+        control_point_spacing=[
+            parameters.elastic_control_point_spacing for _ in range(dims)
+        ],
+        jitter_sigma=[parameters.elastic_control_point_sigma for _ in range(dims)],
+        rotation_interval=(0, 2 * math.pi if parameters.rotation else 0),
+        scale_interval=(parameters.zoom_min, parameters.zoom_max),
+    )
+    pipeline += gp.NoiseAugment(
+        raw_key, mean=parameters.gausian_noise_mean, var=parameters.gausian_noise_var
+    )
 
     # Generate Affinities
     pipeline += gp.AddAffinities(
@@ -152,7 +172,7 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
             gt_key,
             lsd_key,
             mask=lsd_mask_key,
-            sigma=3 * voxel_size,
+            sigma=parameters.lsd_sigma * voxel_size,
         )
 
     # Trainer attributes:

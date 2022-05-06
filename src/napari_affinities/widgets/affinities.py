@@ -184,9 +184,11 @@ class ModelWidget(QWidget):
             self.advanced_widget.shift_min.value,
             self.advanced_widget.shift_max.value,
             self.advanced_widget.noise_mean.value,
-            self.advanced_widget.noise_std.value,
+            self.advanced_widget.noise_var.value,
             self.advanced_widget.elastic_control_spacing.value,
             self.advanced_widget.elastic_control_sigma.value,
+            self.advanced_widget.zoom_min.value,
+            self.advanced_widget.zoom_max.value,
             self.advanced_widget.rotation.value,
             self.advanced_widget.mirror.value,
             self.advanced_widget.transpose.value,
@@ -446,7 +448,7 @@ class ModelWidget(QWidget):
             label='<a href="https://localshapedescriptors.github.io"><font color=white>LSDs</font></a>',
         )
         lsd_sigma = create_widget(
-            annotation=float, name="lsd_sigma", label="LSD sigma(nm)", value=10
+            annotation=float, name="lsd_sigma", label="LSD sigma", value=3
         )
         scale_min = create_widget(
             annotation=float,
@@ -485,8 +487,8 @@ class ModelWidget(QWidget):
         noise_mean = create_widget(
             annotation=float, name="noise_mean", label="Noise mean", value=0.0
         )
-        noise_std = create_widget(
-            annotation=float, name="noise_std", label="Noise std", value=0.5
+        noise_var = create_widget(
+            annotation=float, name="noise_var", label="Noise var", value=0.5
         )
         elastic_control_spacing = create_widget(
             annotation=int,
@@ -499,6 +501,20 @@ class ModelWidget(QWidget):
             name="elastic_control_sigma",
             label="Elastic control sigma",
             value=10,
+        )
+        zoom_min = create_widget(
+            annotation=float,
+            name="zoom_min",
+            label="Zoom min",
+            value=0.8,
+            options={"min": 0},
+        )
+        zoom_max = create_widget(
+            annotation=float,
+            name="zoom_max",
+            label="Zoom max",
+            value=1.2,
+            options={"min": 0},
         )
         rotation = create_widget(
             annotation=bool, name="rotation", label="Rotation", value=True
@@ -525,9 +541,11 @@ class ModelWidget(QWidget):
                 shift_min,
                 shift_max,
                 noise_mean,
-                noise_std,
+                noise_var,
                 elastic_control_spacing,
                 elastic_control_sigma,
+                zoom_min,
+                zoom_max,
                 rotation,
                 mirror,
                 transpose,
