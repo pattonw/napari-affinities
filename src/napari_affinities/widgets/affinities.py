@@ -261,11 +261,12 @@ class ModelWidget(QWidget):
                     affs,
                     {
                         "name": "Affinities",
-                        "metadata": {"offsets": offsets, "overwrite": True},
+                        "metadata": {"offsets": offsets},
                         "axes": (
                             "channel",
                             *spatial_axes,
                         ),
+                        "overwrite": True,
                     },
                     "image",
                 ),
@@ -487,9 +488,12 @@ class ModelWidget(QWidget):
 
         for data, metadata, layer_type in layers:
             # then try to update the viewer layer with that name.
+            print("Metadata: ", metadata)
             name = metadata.pop("name")
             axes = metadata.pop("axes")
             overwrite = metadata.pop("overwrite", False)
+            print("Metadata: ", metadata)
+            print("Overwrite: ", overwrite)
 
             # handle viewer axes if still default numerics
             # TODO: Support using xarray axis labels as soon as napari does
