@@ -101,6 +101,8 @@ class ModelWidget(QWidget):
         collapsable_train_widget.addWidget(self.train_button)
         collapsable_train_widget.addWidget(self.async_predict_button)
 
+        layout.addWidget(collapsable_train_widget)
+
         # add advanced dropdown
         advanced_options = QCollapsible("Advanced: expand for options:", self)
         self.advanced_widget = self.create_advanced_widget(napari_viewer)
@@ -113,9 +115,7 @@ class ModelWidget(QWidget):
         self.snapshot_button.clicked.connect(self.snapshot)
         advanced_options.addWidget(self.snapshot_button)
 
-        collapsable_train_widget.addWidget(advanced_options)
-
-        layout.addWidget(collapsable_train_widget)
+        layout.addWidget(advanced_options)
 
         # Predict widget(Collapsable)
         collapsable_predict_widget = QCollapsible(
@@ -429,10 +429,96 @@ class ModelWidget(QWidget):
             name="lsd_label",
             label='<a href="https://localshapedescriptors.github.io"><font color=white>LSDs</font></a>',
         )
-        sigma = create_widget(annotation=float, name="sigma", label="sigma", value=0)
-        lsds = Container(widgets=[lsd_label, sigma], name="lsds")
+        lsd_sigma = create_widget(
+            annotation=float, name="lsd_sigma", label="LSD sigma(nm)", value=10
+        )
+        intensity_scale_min = create_widget(
+            annotation=float,
+            name="scale_min",
+            label="Scale min",
+            value=0.5,
+            options={"min": 0},
+        )
+        intensity_scale_max = create_widget(
+            annotation=float,
+            name="scale_max",
+            label="Scale max",
+            value=2.0,
+            options={"min": 0},
+        )
+        intensity_shift_min = create_widget(
+            annotation=float,
+            name="shift_min",
+            label="Shift min",
+            value=-0.5,
+            options={
+                "min": -1,
+                "max": 1,
+            },
+        )
+        intensity_shift_max = create_widget(
+            annotation=float,
+            name="shift_max",
+            label="Shift max",
+            value=0.5,
+            options={
+                "min": -1,
+                "max": 1,
+            },
+        )
+        noise_mean = create_widget(
+            annotation=float, name="noise_mean", label="Noise mean", value=0.0
+        )
+        noise_std = create_widget(
+            annotation=float, name="noise_std", label="Noise std", value=0.5
+        )
+        elastic_control_spacing = create_widget(
+            annotation=int,
+            name="elastic_ctrl_spacing",
+            label="Elastic control spacing",
+            value=50,
+        )
+        elastic_control_sigma = create_widget(
+            annotation=int,
+            name="elastic_ctrl_sigma",
+            label="Elastic control sigma",
+            value=10,
+        )
+        rotation = create_widget(
+            annotation=bool, name="rotation", label="Rotation", value=True
+        )
+        mirror = create_widget(
+            annotation=bool, name="mirror", label="Mirror", value=True
+        )
+        transpose = create_widget(
+            annotation=bool, name="transpose", label="Transpose", value=True
+        )
+        num_cpus = create_widget(
+            annotation=int, name="num_cpus", label="Num CPUs", value=1
+        )
+        batch_size = create_widget(
+            annotation=int, name="batch_size", label="Batch Size", value=1
+        )
 
-        advanced_widget = Container(widgets=[lsds])
+        advanced_widget = Container(
+            widgets=[
+                lsd_label,
+                lsd_sigma,
+                intensity_scale_min,
+                intensity_scale_max,
+                intensity_shift_min,
+                intensity_shift_max,
+                noise_mean,
+                noise_std,
+                elastic_control_spacing,
+                elastic_control_sigma,
+                rotation,
+                mirror,
+                transpose,
+                num_cpus,
+                batch_size,
+            ]
+        )
         return advanced_widget
 
     def create_predict_widget(self, viewer):

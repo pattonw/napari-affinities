@@ -16,6 +16,7 @@ LayerType = str
 
 @dataclass
 class GunpowderParameters:
+    lsd_sigma: float = 50
     intensity_scale_min: float = 0.5
     intensity_scale_max: float = 2.0
     intensity_shift_min: float = -0.5
