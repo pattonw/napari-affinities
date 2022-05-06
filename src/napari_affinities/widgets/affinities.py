@@ -96,13 +96,24 @@ class ModelWidget(QWidget):
         # add buttons
         self.train_button = QPushButton("Train!", self)
         self.train_button.clicked.connect(self.train)
-        self.snapshot_button = QPushButton("Snapshot!", self)
-        self.snapshot_button.clicked.connect(self.snapshot)
         self.async_predict_button = QPushButton("Predict(online)!", self)
         self.async_predict_button.clicked.connect(self.async_predict)
         collapsable_train_widget.addWidget(self.train_button)
-        collapsable_train_widget.addWidget(self.snapshot_button)
         collapsable_train_widget.addWidget(self.async_predict_button)
+
+        # add advanced dropdown
+        advanced_options = QCollapsible("Advanced: expand for options:", self)
+        self.advanced_widget = self.create_advanced_widget(napari_viewer)
+        advanced_options.addWidget(
+            self.advanced_widget.native
+        )  # FunctionGui -> QWidget via .native
+
+        # add buttons
+        self.snapshot_button = QPushButton("Snapshot!", self)
+        self.snapshot_button.clicked.connect(self.snapshot)
+        advanced_options.addWidget(self.snapshot_button)
+
+        collapsable_train_widget.addWidget(advanced_options)
 
         layout.addWidget(collapsable_train_widget)
 
@@ -419,6 +430,13 @@ class ModelWidget(QWidget):
         train_widget = Container(widgets=[raw, gt, mask, lsds])
 
         return train_widget
+
+    def create_advanced_widget(self, viewer):
+        # inputs:
+
+        advanced_widget = Container(widgets=[])
+
+        return advanced_widget
 
     def create_predict_widget(self, viewer):
         # inputs:
