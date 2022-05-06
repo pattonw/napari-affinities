@@ -180,7 +180,7 @@ class ModelWidget(QWidget):
             assert self.__training_generator is not None
             self.__training_generator.resume()
             self.train_button.setText("Pause!")
-            self.disable_buttons()
+            self.disable_buttons(predict=True)
         else:
             if self.__training_generator is not None:
                 self.__training_generator.send("stop")
@@ -228,7 +228,7 @@ class ModelWidget(QWidget):
         self.__training_generator.start()
 
         # all buttons are enabled while the training loop is running
-        self.disable_buttons()
+        self.disable_buttons(predict=True)
 
     def train(self):
         self.training = not self.training
@@ -482,6 +482,7 @@ class ModelWidget(QWidget):
         assert self.model is not None
         self.model.weights["pytorch_state_dict"].source = weights_path
         self.reset_training_state(keep_stats=True)
+        self.disable_buttons(snapshot=True, async_predict=True)
 
     def add_layers(self, layers):
         viewer_axis_labels = self.viewer.dims.axis_labels
