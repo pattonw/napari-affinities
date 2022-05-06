@@ -40,10 +40,8 @@ class NapariLabelsSource(gp.BatchProvider):
         return output
 
     def _remove_leading_dims(self, data):
-        print(data.shape)
         while data.shape[0] == 1:
             data = data[0]
-            print(data.shape)
         return data
 
     def _read_metadata(self, labels):

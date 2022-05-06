@@ -7,10 +7,26 @@ import numpy as np
 from bioimageio.core.resource_io.nodes import Model
 
 from contextlib import contextmanager
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Dict, Any
+from dataclasses import dataclass
 
 LayerName = str
 LayerType = str
+
+
+@dataclass
+class GunpowderParameters:
+    intensity_scale_min: float = 0.5
+    intensity_scale_max: float = 2.0
+    intensity_shift_min: float = -0.5
+    intensity_shift_max: float = 0.5
+    gausian_noise_mean: float = 0.0
+    gausian_noise_std: float = 0.2
+    elastic_control_point_spacing: int = 50
+    elastic_control_point_sigma: int = 10
+    rotation_dims: Optional[int] = 2
+    num_cpu_processes: int = 1
+    batch_size: int = 1
 
 
 class PipelineDataGenerator:
@@ -32,7 +48,12 @@ class PipelineDataGenerator:
         self.keys = keys
         self.spatial_axes = axes
 
-    def next(self, snapshot: bool) -> List[Tuple[np.ndarray, LayerName, LayerType]]:
+    def next(
+        self, snapshot: bool
+    ) -> Tuple[
+        List[Tuple[np.ndarray, Dict[str, Any], LayerType]],
+        List[Tuple[np.ndarray, Dict[str, Any], LayerType]],
+    ]:
         request = gp.BatchRequest()
         request_template = self.snapshot_request if snapshot else self.request
         for k, v in request_template.items():
@@ -60,19 +81,13 @@ class PipelineDataGenerator:
 
 
 @contextmanager
-def build_pipeline(
-    raw,
-    gt,
-    mask,
-    lsds: bool,
-    model: Model,
-    num_cpu_processes: int = 1,
-    batch_size: int = 1,
-):
+def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters):
+    # TODO: support lsds
+    lsds = False
     # read metadata from model
     offsets = model.config["mws"]["offsets"]
     dims = len(offsets[0])
-    spatial_axes = ["time", "z", "y", "x"][-dims:]
+    spatial_axes = tuple(["time", "z", "y", "x"][-dims:])
 
     input_shape = gp.Coordinate(model.inputs[0].shape.min[-dims:])
     output_shape = gp.Coordinate(input_shape)
@@ -138,14 +153,14 @@ def build_pipeline(
         )
 
     # Trainer attributes:
-    if num_cpu_processes > 1:
-        pipeline += gp.PreCache(num_workers=num_cpu_processes)
+    if parameters.num_cpu_processes > 1:
+        pipeline += gp.PreCache(num_workers=parameters.num_cpu_processes)
 
     # add channel dimensions
     pipeline += gp.Unsqueeze([raw_key, gt_key, mask_key])
 
     # stack to create a batch dimension
-    pipeline += gp.Stack(batch_size)
+    pipeline += gp.Stack(parameters.batch_size)
 
     request = gp.BatchRequest()
     request.add(raw_key, input_size)

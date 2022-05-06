@@ -1,6 +1,6 @@
 # local package imports
 from copy import deepcopy
-from ..gp.pipeline import build_pipeline
+from ..gp.pipeline import GunpowderParameters, build_pipeline
 from .gui_helpers import layer_choice_widget
 from ..bioimageio.helpers import get_torch_module
 
@@ -182,6 +182,10 @@ class ModelWidget(QWidget):
         except AttributeError:
             return False
 
+    @property
+    def training_parameters(self) -> GunpowderParameters:
+        return GunpowderParameters()
+
     @training.setter
     def training(self, training: bool):
         self.__training = training
@@ -199,8 +203,8 @@ class ModelWidget(QWidget):
             self.disable_buttons(snapshot=True, async_predict=True)
 
     @contextmanager
-    def build_pipeline(self, raw, gt, mask, lsds):
-        with build_pipeline(raw, gt, mask, lsds, self.model) as pipeline:
+    def build_pipeline(self, raw, gt, mask, parameters: GunpowderParameters):
+        with build_pipeline(raw, gt, mask, self.model, parameters) as pipeline:
             yield pipeline
 
     def reset_training_state(self, keep_stats=False):
@@ -231,7 +235,7 @@ class ModelWidget(QWidget):
             self.train_widget.raw.value,
             self.train_widget.gt.value,
             self.train_widget.mask.value,
-            # self.train_widget.lsds.value,
+            self.training_parameters,
             iteration=self.iteration,
         )
         self.__training_generator.yielded.connect(self.on_yield)
@@ -414,28 +418,21 @@ class ModelWidget(QWidget):
         mask = layer_choice_widget(
             viewer, annotation=Optional[napari.layers.Labels], name="mask"
         )
-        lsd_label = Label(
-            name="lsd_label",
-            label='<a href="https://localshapedescriptors.github.io"><font color=white>LSDs</font></a>',
-        )
-        use_lsds = create_widget(
-            annotation=bool,
-            name="lsds",
-            label="use LSDs",
-            value=False,
-        )
-        sigma = create_widget(annotation=float, name="sigma", label="sigma", value=0)
-        lsds = Container(widgets=[lsd_label, use_lsds, sigma], name="lsds")
 
-        train_widget = Container(widgets=[raw, gt, mask, lsds])
+        train_widget = Container(widgets=[raw, gt, mask])
 
         return train_widget
 
     def create_advanced_widget(self, viewer):
         # inputs:
+        lsd_label = Label(
+            name="lsd_label",
+            label='<a href="https://localshapedescriptors.github.io"><font color=white>LSDs</font></a>',
+        )
+        sigma = create_widget(annotation=float, name="sigma", label="sigma", value=0)
+        lsds = Container(widgets=[lsd_label, sigma], name="lsds")
 
-        advanced_widget = Container(widgets=[])
-
+        advanced_widget = Container(widgets=[lsds])
         return advanced_widget
 
     def create_predict_widget(self, viewer):
@@ -558,7 +555,9 @@ class ModelWidget(QWidget):
                     self.viewer.add_labels(data, name=name, **metadata)
 
     @thread_worker
-    def train_affinities(self, raw, gt, mask, lsds=False, iteration=0):
+    def train_affinities(self, raw, gt, mask, parameters, iteration=0):
+        # TODO: support lsds
+        lsds = False
 
         if self.model is None:
             raise ValueError("Please load a model either from your filesystem or a url")
@@ -590,7 +589,7 @@ class ModelWidget(QWidget):
         raw_data = raw_data.reshape((1, *raw_data.shape))
 
         # Train loop:
-        with self.build_pipeline(raw, gt, mask, lsds) as pipeline:
+        with self.build_pipeline(raw, gt, mask, parameters) as pipeline:
             loss = float("nan")
             mode = yield (iteration, loss)
             while True:
