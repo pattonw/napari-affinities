@@ -23,7 +23,8 @@ jobs:
     strategy:
       matrix:
         platform: [ubuntu-latest]
-        python-version: [3.9]
+        python-version: [3.7, 3.8, 3.9]
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v2
@@ -45,25 +46,45 @@ jobs:
       - name: Install Windows OpenGL
         if: runner.os == 'Windows'
         run: |
-          git clone --depth 1 git://github.com/pyvista/gl-ci-helpers.git
+          git clone --depth 1 https://github.com/pyvista/gl-ci-helpers.git
           powershell gl-ci-helpers/appveyor/install_opengl.ps1
 
       # note: if you need dependencies from conda, considering using
       # setup-miniconda: https://github.com/conda-incubator/setup-miniconda
       # and
       # tox-conda: https://github.com/tox-dev/tox-conda
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
+      - name: Conda info
+        shell: bash -l {0}
+        run: conda info
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install setuptools tox tox-gh-actions
+          $CONDA/bin/conda install pytorch cpuonly -c pytorch --yes --name base
+          $CONDA/bin/conda list
+          $CONDA/bin/python -c "import torch"
+          $CONDA/bin/conda install -c conda-forge affogato --yes --name base
+          $CONDA/bin/python -m pip install cython
+          $CONDA/bin/python -m pip install -r requirements.txt
+          $CONDA/bin/python -m pip install pytest-xvfb
+          $CONDA/bin/python -m pip install -e .
+          $CONDA/bin/python -c "import gunpowder"
 
-      # this runs the platform-specific tests declared in tox.ini
-      - name: Test with tox
-        uses: GabrielBB/xvfb-action@v1
-        with:
-          run: tox
-        env:
-          PLATFORM: ${{ matrix.platform }}
+      - name: Run test
+        run: |
+          $CONDA/bin/python -m pytest -v --color=yes
+
+      # # this runs the platform-specific tests declared in tox.ini
+      # - name: Test with tox
+      #   uses: GabrielBB/xvfb-action@v1
+      #   with:
+      #     run: tox
+      #   env:
+      #     PLATFORM: ${{ matrix.platform }}
 
       - name: Coverage
         uses: codecov/codecov-action@v2
