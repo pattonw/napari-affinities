@@ -25,7 +25,9 @@ class GunpowderParameters:
     gausian_noise_std: float = 0.2
     elastic_control_point_spacing: int = 50
     elastic_control_point_sigma: int = 10
-    rotation_dims: Optional[int] = 2
+    rotation: bool = True
+    mirror: bool = True
+    transpose: bool = True
     num_cpu_processes: int = 1
     batch_size: int = 1
 

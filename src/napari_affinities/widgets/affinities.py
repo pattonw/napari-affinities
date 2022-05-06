@@ -176,15 +176,31 @@ class ModelWidget(QWidget):
             self.model_label.setText("None")
 
     @property
+    def training_parameters(self) -> GunpowderParameters:
+        parameters = GunpowderParameters(
+            self.advanced_widget.lsd_sigma.value,
+            self.advanced_widget.scale_min.value,
+            self.advanced_widget.scale_max.value,
+            self.advanced_widget.shift_min.value,
+            self.advanced_widget.shift_max.value,
+            self.advanced_widget.noise_mean.value,
+            self.advanced_widget.noise_std.value,
+            self.advanced_widget.elastic_control_spacing.value,
+            self.advanced_widget.elastic_control_sigma.value,
+            self.advanced_widget.rotation.value,
+            self.advanced_widget.mirror.value,
+            self.advanced_widget.transpose.value,
+            self.advanced_widget.num_cpus.value,
+            self.advanced_widget.batch_size.value,
+        )
+        return parameters
+
+    @property
     def training(self) -> bool:
         try:
             return self.__training
         except AttributeError:
             return False
-
-    @property
-    def training_parameters(self) -> GunpowderParameters:
-        return GunpowderParameters()
 
     @training.setter
     def training(self, training: bool):
@@ -432,21 +448,21 @@ class ModelWidget(QWidget):
         lsd_sigma = create_widget(
             annotation=float, name="lsd_sigma", label="LSD sigma(nm)", value=10
         )
-        intensity_scale_min = create_widget(
+        scale_min = create_widget(
             annotation=float,
             name="scale_min",
             label="Scale min",
             value=0.5,
             options={"min": 0},
         )
-        intensity_scale_max = create_widget(
+        scale_max = create_widget(
             annotation=float,
             name="scale_max",
             label="Scale max",
             value=2.0,
             options={"min": 0},
         )
-        intensity_shift_min = create_widget(
+        shift_min = create_widget(
             annotation=float,
             name="shift_min",
             label="Shift min",
@@ -456,7 +472,7 @@ class ModelWidget(QWidget):
                 "max": 1,
             },
         )
-        intensity_shift_max = create_widget(
+        shift_max = create_widget(
             annotation=float,
             name="shift_max",
             label="Shift max",
@@ -474,13 +490,13 @@ class ModelWidget(QWidget):
         )
         elastic_control_spacing = create_widget(
             annotation=int,
-            name="elastic_ctrl_spacing",
+            name="elastic_control_spacing",
             label="Elastic control spacing",
             value=50,
         )
         elastic_control_sigma = create_widget(
             annotation=int,
-            name="elastic_ctrl_sigma",
+            name="elastic_control_sigma",
             label="Elastic control sigma",
             value=10,
         )
@@ -504,10 +520,10 @@ class ModelWidget(QWidget):
             widgets=[
                 lsd_label,
                 lsd_sigma,
-                intensity_scale_min,
-                intensity_scale_max,
-                intensity_shift_min,
-                intensity_shift_max,
+                scale_min,
+                scale_max,
+                shift_min,
+                shift_max,
                 noise_mean,
                 noise_std,
                 elastic_control_spacing,
