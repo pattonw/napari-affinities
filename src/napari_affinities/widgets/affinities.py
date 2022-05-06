@@ -284,7 +284,6 @@ class ModelWidget(QWidget):
         while len(raw_data.shape) < ndim + 2:
             raw_data = raw_data.reshape((1, *raw_data.shape))
 
-        print("Predicting with weights: ", model.weights["pytorch_state_dict"].source)
         with create_prediction_pipeline(bioimageio_model=model) as pp:
             # [0] to access first input array/output array
             pred_data = DataArray(raw_data, dims=tuple(pp.input_specs[0].axes))
@@ -489,12 +488,9 @@ class ModelWidget(QWidget):
 
         for data, metadata, layer_type in layers:
             # then try to update the viewer layer with that name.
-            print("Metadata: ", metadata)
             name = metadata.pop("name")
             axes = metadata.pop("axes")
             overwrite = metadata.pop("overwrite", False)
-            print("Metadata: ", metadata)
-            print("Overwrite: ", overwrite)
 
             # handle viewer axes if still default numerics
             # TODO: Support using xarray axis labels as soon as napari does
