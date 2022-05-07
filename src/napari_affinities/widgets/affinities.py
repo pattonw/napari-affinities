@@ -309,6 +309,27 @@ class ModelWidget(QWidget):
     def _predict(self, model, raw_data, offsets):
         ndim = len(offsets[0])
 
+        outputs = model.outputs
+        output_names = [output.name.lower() for output in outputs]
+        try:
+            affs_index = output_names.index("affinities")
+        except ValueError as e:
+            raise ValueError(
+                'This model does not provide an output with name "affinities"'
+            )
+        try:
+            lsd_index = output_names.index("lsds")
+            lsds = True
+        except ValueError:
+            lsds = False
+            lsd_index = None
+        try:
+            fgbg_index = output_names.index("fgbg")
+            fgbg = True
+        except ValueError:
+            fgbg = False
+            fgbg_index = None
+
         # add batch and potentially channel dimensions
         assert len(raw_data.shape) >= ndim, (
             f"raw data has {len(raw_data.shape)} dimensions but "
@@ -320,11 +341,24 @@ class ModelWidget(QWidget):
         with create_prediction_pipeline(bioimageio_model=model) as pp:
             # [0] to access first input array/output array
             pred_data = DataArray(raw_data, dims=tuple(pp.input_specs[0].axes))
-            affs = pp(pred_data)[0].values
+            outputs = list(pp(pred_data))
+
+        affs = outputs[affs_index].values
+
+        result = [None for _ in output_names]
 
         # remove batch dimensions
         pred_data = pred_data.squeeze()
         affs = affs.squeeze()
+        result[affs_index] = affs
+        if lsds:
+            lsds = outputs[lsd_index].values
+            lsds = lsds.squeeze()
+            result[lsd_index] = lsds
+        if fgbg:
+            fgbg = outputs[fgbg_index].values
+            fgbg = fgbg.squeeze(0)
+            result[fgbg_index] = fgbg
 
         # assert result is as expected
         assert (
@@ -337,7 +371,8 @@ class ModelWidget(QWidget):
             f"Number of affinity channels ({affs.shape[0]}) "
             f"does not match number of offsets ({len(offsets)})"
         )
-        return affs
+
+        return tuple(result)
 
     def save(self):
         """
@@ -448,7 +483,7 @@ class ModelWidget(QWidget):
             label='<a href="https://localshapedescriptors.github.io"><font color=white>LSDs</font></a>',
         )
         lsd_sigma = create_widget(
-            annotation=float, name="lsd_sigma", label="LSD sigma", value=3
+            annotation=int, name="lsd_sigma", label="LSD sigma", value=3
         )
         scale_min = create_widget(
             annotation=float,
@@ -657,7 +692,7 @@ class ModelWidget(QWidget):
                     layer.data = np.concatenate(
                         [
                             layer.data.reshape(*(-1, *sample_shape)),
-                            data.reshape(-1, *sample_shape),
+                            data.reshape(-1, *sample_shape).astype(layer.data.dtype),
                         ],
                         axis=0,
                     )
@@ -672,17 +707,34 @@ class ModelWidget(QWidget):
                 if layer_type == "image":
                     self.viewer.add_image(data, name=name, **metadata)
                 elif layer_type == "labels":
-                    self.viewer.add_labels(data, name=name, **metadata)
+                    self.viewer.add_labels(data.astype(int), name=name, **metadata)
 
     @thread_worker
     def train_affinities(self, raw, gt, mask, parameters, iteration=0):
-        # TODO: support lsds
-        lsds = False
 
         if self.model is None:
             raise ValueError("Please load a model either from your filesystem or a url")
 
         model = deepcopy(self.model)
+
+        outputs = model.outputs
+        output_names = [output.name.lower() for output in outputs]
+        try:
+            affs_index = output_names.index("affinities")
+        except ValueError as e:
+            raise ValueError(
+                'This model does not provide an output with name "affinities"'
+            )
+        try:
+            lsd_index = output_names.index("lsds")
+            lsds = True
+        except ValueError:
+            lsds = False
+        try:
+            fgbg_index = output_names.index("fgbg")
+            fgbg = True
+        except ValueError:
+            fgbg = False
 
         # constants
         offsets = model.config["mws"]["offsets"]
@@ -696,6 +748,7 @@ class ModelWidget(QWidget):
         lsd_loss_func = torch.nn.MSELoss()
         # aff_loss_func = torch.nn.BCEWithLogitsLoss()
         aff_loss_func = torch.nn.MSELoss()
+        fgbg_loss_func = torch.nn.MSELoss()  # TODO: add support for DiceLoss
         optimizer = torch.optim.Adam(params=torch_module.parameters())
 
         # TODO: How to display profiling stats
@@ -727,14 +780,12 @@ class ModelWidget(QWidget):
                     # TODO: How to determine axes of raw data. metadata?
                     # guess? simply make it fit what the model expects?
 
-                    affs = self._predict(model, raw_data, offsets)
+                    predictions = tuple(self._predict(model, raw_data, offsets))
 
                     # Generate affinities and keep the offsets as metadata
-                    mode = yield (
-                        None,
-                        None,
+                    prediction_layers = [
                         (
-                            affs,
+                            predictions[affs_index],
                             {
                                 "name": "Affinities(online)",
                                 "metadata": {"offsets": offsets},
@@ -745,7 +796,38 @@ class ModelWidget(QWidget):
                             },
                             "image",
                         ),
-                    )
+                    ]
+                    if lsds:
+                        prediction_layers.append(
+                            (
+                                predictions[lsd_index],
+                                {
+                                    "name": "LSDs(online)",
+                                    "metadata": {},
+                                    "axes": (
+                                        "channel",
+                                        *spatial_axes,
+                                    ),
+                                },
+                                "image",
+                            ),
+                        )
+                    if fgbg:
+                        prediction_layers.append(
+                            (
+                                predictions[fgbg_index],
+                                {
+                                    "name": "fgbg(online)",
+                                    "metadata": {},
+                                    "axes": (
+                                        "channel",
+                                        *spatial_axes,
+                                    ),
+                                },
+                                "image",
+                            ),
+                        )
+                    mode = yield (None, None, *prediction_layers)
                 elif mode is None or mode == "snapshot":
                     snapshot_iteration = mode == "snapshot"
 
@@ -755,28 +837,32 @@ class ModelWidget(QWidget):
                         torch.as_tensor(array[0], device=device).float()
                         for array in arrays
                     ]
-                    raw, aff_target, aff_mask, *lsd_arrays = tensors
+                    raw, aff_target, aff_mask, *optional_arrays = tensors
+                    if lsds:
+                        lsd_target, lsd_mask, *optional_arrays = optional_arrays
+                    if fgbg:
+                        fgbg_target, fgbg_mask = optional_arrays
+                    outputs = tuple(torch_module(raw))
+
+                    affs_loss = aff_loss_func(
+                        outputs[affs_index] * aff_mask,
+                        aff_target * aff_mask,
+                    )
 
                     optimizer.zero_grad()
+                    losses = [affs_loss]
                     if lsds:
-                        lsd_target, lsd_mask = lsd_arrays
-
-                        aff_pred, lsd_pred = torch_module(raw)
-
-                        aff_loss = aff_loss_func(
-                            aff_pred * aff_mask,
-                            aff_target * aff_mask,
-                        )
                         lsd_loss = lsd_loss_func(
-                            lsd_pred * lsd_mask, lsd_target * lsd_mask
+                            outputs[lsd_index] * lsd_mask, lsd_target * lsd_mask
                         )
-                        loss = aff_loss * lsd_loss
-                    else:
-                        aff_pred = torch_module(raw)
-                        loss = aff_loss_func(
-                            aff_pred * aff_mask,
-                            aff_target * aff_mask,
+                        losses.append(lsd_loss)
+                    if fgbg:
+                        fgbg_loss = fgbg_loss_func(
+                            outputs[fgbg_index] * fgbg_mask, fgbg_target * fgbg_mask
                         )
+                        losses.append(fgbg_loss)
+
+                    loss = sum(losses)
 
                     loss.backward()
                     optimizer.step()
@@ -786,7 +872,7 @@ class ModelWidget(QWidget):
                         pred_arrays = []
                         pred_arrays.append(
                             (
-                                aff_pred.detach().cpu().numpy(),
+                                outputs[affs_index].detach().cpu().numpy(),
                                 {
                                     "name": "sample_aff_pred",
                                     "axes": (
@@ -801,9 +887,24 @@ class ModelWidget(QWidget):
                         if lsds:
                             pred_arrays.append(
                                 (
-                                    lsd_pred.detach().cpu().numpy(),
+                                    outputs[lsd_index].detach().cpu().numpy(),
                                     {
                                         "name": "sample_lsd_pred",
+                                        "axes": (
+                                            "batch",
+                                            "channel",
+                                            *spatial_axes,
+                                        ),
+                                    },
+                                    "image",
+                                )
+                            )
+                        if fgbg:
+                            pred_arrays.append(
+                                (
+                                    outputs[fgbg_index].detach().cpu().numpy(),
+                                    {
+                                        "name": "sample_fgbg_pred",
                                         "axes": (
                                             "batch",
                                             "channel",

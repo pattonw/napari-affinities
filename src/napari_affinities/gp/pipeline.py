@@ -1,5 +1,5 @@
 from pytest import param
-from .nodes import NapariImageSource, NapariLabelsSource, OnesSource
+from .nodes import NapariImageSource, NapariLabelsSource, OnesSource, Binarize
 
 import gunpowder as gp
 from lsd.gp import AddLocalShapeDescriptor
@@ -18,7 +18,7 @@ LayerType = str
 
 @dataclass
 class GunpowderParameters:
-    lsd_sigma: float = 50
+    lsd_sigma: int = 5
     intensity_scale_min: float = 0.5
     intensity_scale_max: float = 2.0
     intensity_shift_min: float = -0.5
@@ -47,7 +47,7 @@ class PipelineDataGenerator:
         request: gp.BatchRequest,
         snapshot_request: gp.BatchRequest,
         keys: List[Tuple[gp.ArrayKey, str]],
-        axes: Tuple[str],
+        axes: List[str],
     ):
         self.pipeline = pipeline
         self.request = request
@@ -89,12 +89,28 @@ class PipelineDataGenerator:
 
 @contextmanager
 def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters):
-    # TODO: support lsds
-    lsds = False
+
+    outputs = model.outputs
+    output_names = [output.name.lower() for output in outputs]
+    try:
+        affs_index = output_names.index("affinities")
+    except ValueError as e:
+        raise ValueError('This model does not provide an output with name "affinities"')
+    try:
+        lsd_index = output_names.index("lsds")
+        lsds = True
+    except ValueError:
+        lsds = False
+    try:
+        fgbg_index = output_names.index("fgbg")
+        fgbg = True
+    except ValueError:
+        fgbg = False
+
     # read metadata from model
     offsets = model.config["mws"]["offsets"]
     dims = len(offsets[0])
-    spatial_axes = tuple(["time", "z", "y", "x"][-dims:])
+    spatial_axes = ["time", "z", "y", "x"][-dims:]
 
     input_shape = gp.Coordinate(model.inputs[0].shape.min[-dims:])
     output_shape = gp.Coordinate(input_shape)
@@ -118,6 +134,8 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
     affinity_mask_key = gp.ArrayKey("AFFINITY_MASK")
     lsd_key = gp.ArrayKey("LSD")
     lsd_mask_key = gp.ArrayKey("LSD_MASK")
+    fgbg_key = gp.ArrayKey("FGBG")
+    fgbg_mask_key = gp.ArrayKey("FGBG_MASK")
 
     # Get source nodes:
     raw_source = NapariImageSource(raw, raw_key)
@@ -131,6 +149,8 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
         mask_source = NapariLabelsSource(mask, mask_key)
     else:
         with gp.build(gt_source):
+            mask_spec = gt_source.spec[gt_key]
+            mask_spec.dtype = bool
             mask_source = OnesSource(gt_source.spec[gt_key], mask_key)
 
     # Pad gt/mask with just enough to make sure random sampling is uniform
@@ -172,7 +192,12 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
             gt_key,
             lsd_key,
             mask=lsd_mask_key,
-            sigma=parameters.lsd_sigma * voxel_size,
+            sigma=parameters.lsd_sigma,
+        )
+    if fgbg:
+        pipeline += Binarize(
+            gt_key,
+            fgbg_key,
         )
 
     # Trainer attributes:
@@ -181,6 +206,8 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
 
     # add channel dimensions
     pipeline += gp.Unsqueeze([raw_key, gt_key, mask_key])
+    if fgbg:
+        pipeline += gp.Unsqueeze([fgbg_key])
 
     # stack to create a batch dimension
     pipeline += gp.Stack(parameters.batch_size)
@@ -192,6 +219,9 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
     if lsds:
         request.add(lsd_key, output_size)
         request.add(lsd_mask_key, output_size)
+    if fgbg:
+        request.add(fgbg_key, output_size)
+        request.add(mask_key, output_size)
 
     snapshot_request = gp.BatchRequest()
     snapshot_request.add(raw_key, input_size)
@@ -200,10 +230,10 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
     if lsds:
         snapshot_request.add(lsd_key, output_size)
         snapshot_request.add(lsd_mask_key, output_size)
-    snapshot_request.add(gt_key, output_size)
+    if fgbg:
+        snapshot_request.add(fgbg_key, output_size)
     snapshot_request.add(mask_key, output_size)
-
-    assert not lsds
+    snapshot_request.add(gt_key, output_size)
 
     keys = [
         (raw_key, "image"),
@@ -211,8 +241,9 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
         (affinity_mask_key, "labels"),
         (lsd_key, "image"),
         (lsd_mask_key, "labels"),
-        (gt_key, "labels"),
+        (fgbg_key, "labels"),
         (mask_key, "labels"),
+        (gt_key, "labels"),
     ]
 
     with gp.build(pipeline):
