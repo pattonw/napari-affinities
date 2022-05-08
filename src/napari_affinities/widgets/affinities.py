@@ -733,24 +733,28 @@ class ModelWidget(QWidget):
                 self.viewer.dims.axis_labels = viewer_axis_labels
 
             batch_dim = axes.index("batch") if "batch" in axes else -1
-            sample_shape = data.shape[batch_dim + 1 :]
+            assert batch_dim in [
+                -1,
+                0,
+            ], f"Batch dim must be first"
+            if batch_dim == 0:
+                data = data[0]
 
             try:
                 # add to existing layer
                 layer = self.viewer.layers[name]
 
-                # concatenate along batch dimension
                 if overwrite:
-                    layer.data = data.reshape(*sample_shape)
+                    layer.data = data.reshape(*data.shape)
                 else:
+                    # concatenate along batch dimension
                     layer.data = np.concatenate(
                         [
-                            layer.data.reshape(*(-1, *sample_shape)),
-                            data.reshape(-1, *sample_shape).astype(layer.data.dtype),
+                            layer.data.reshape(-1, *data.shape),
+                            data.reshape(-1, *data.shape).astype(layer.data.dtype),
                         ],
                         axis=0,
                     )
-
                 # make first dimension "batch" if it isn't
                 if not overwrite and viewer_axis_labels[0] != "batch":
                     viewer_axis_labels = ("batch", *viewer_axis_labels)
@@ -888,8 +892,8 @@ class ModelWidget(QWidget):
                     # fetch data:
                     arrays, snapshot_arrays = pipeline.next(snapshot_iteration)
                     tensors = [
-                        torch.as_tensor(array[0], device=device).float()
-                        for array in arrays
+                        torch.as_tensor(array, device=device).float()
+                        for array, _, _ in arrays
                     ]
                     raw, aff_target, aff_mask, *optional_arrays = tensors
                     if lsds:
