@@ -284,17 +284,55 @@ class ModelWidget(QWidget):
         Predict on data provided through the predict widget. Not necessarily the
         same as the training data.
         """
+
+        outputs = self.model.outputs
+        output_names = [output.name.lower() for output in outputs]
+        try:
+            affs_index = output_names.index("affinities")
+        except ValueError as e:
+            raise ValueError(
+                'This model does not provide an output with name "affinities"'
+            )
+        try:
+            lsd_index = output_names.index("lsds")
+            lsds = True
+        except ValueError:
+            lsds = False
+        try:
+            fgbg_index = output_names.index("fgbg")
+            fgbg = True
+        except ValueError:
+            fgbg = False
+
         offsets = self.model.config["mws"]["offsets"]
         ndim = len(offsets[0])
         spatial_axes = self.spatial_dims(ndim)
-        affs = self._predict(self.model, self.predict_widget.raw.value.data[:], offsets)
-        self.add_layers(
-            [
+        predictions = self._predict(
+            self.model, self.predict_widget.raw.value.data[:], offsets
+        )
+        # Generate affinities and keep the offsets as metadata
+        prediction_layers = [
+            (
+                predictions[affs_index],
+                {
+                    "name": "Affinities",
+                    "metadata": {"offsets": offsets},
+                    "axes": (
+                        "channel",
+                        *spatial_axes,
+                    ),
+                    "overwrite": True,
+                },
+                "image",
+            ),
+        ]
+        if lsds:
+            prediction_layers.append(
                 (
-                    affs,
+                    predictions[lsd_index],
                     {
-                        "name": "Affinities",
-                        "metadata": {"offsets": offsets},
+                        "name": "LSDs",
+                        "metadata": {},
                         "axes": (
                             "channel",
                             *spatial_axes,
@@ -303,8 +341,24 @@ class ModelWidget(QWidget):
                     },
                     "image",
                 ),
-            ]
-        )
+            )
+        if fgbg:
+            prediction_layers.append(
+                (
+                    predictions[fgbg_index],
+                    {
+                        "name": "fgbg",
+                        "metadata": {},
+                        "axes": (
+                            "channel",
+                            *spatial_axes,
+                        ),
+                        "overwrite": True,
+                    },
+                    "image",
+                ),
+            )
+        self.add_layers(prediction_layers)
 
     def _predict(self, model, raw_data, offsets):
         ndim = len(offsets[0])
