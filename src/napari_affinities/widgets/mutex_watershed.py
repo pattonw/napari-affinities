@@ -42,8 +42,6 @@ def mutex_watershed_widget(
             shape == mask.data.shape[1:]
         ), f"Got shape {seeds.data.shape} for mask but expected {shape}"
 
-    # if a previous segmentation is provided, it must have a "grid graph"
-    # in its metadata.
     grid_graph = MWSGridGraph(shape)
     if mask is not None:
         grid_graph.set_mask(mask.data)
@@ -54,13 +52,25 @@ def mutex_watershed_widget(
     ndim = len(offsets[0])
 
     grid_graph.add_attractive_seed_edges = True
-    affs = np.require(affinities.data[:ndim], requirements="C")
-    affs = 1 - affs if invert_affinities else affs
-    uvs, weights = grid_graph.compute_nh_and_weights(affs, offsets[:ndim])
+    neighbor_affs, lr_affs = (
+        np.require(affinities.data[:ndim], requirements="C"),
+        np.require(affinities.data[ndim:], requirements="C"),
+    )
+
+    # assuming affinities are 1 between voxels that belong together and
+    # 0 if they are not part of the same object. Invert if the other way
+    # around.
+    # neighbors_affs should be high for objects that belong together
+    # lr_affs is the oposite
+    if invert_affinities:
+        neighbor_affs = 1 - neighbor_affs
+    else:
+        lr_affs = 1 - lr_affs
+    uvs, weights = grid_graph.compute_nh_and_weights(neighbor_affs, offsets[:ndim])
 
     grid_graph.add_attractive_seed_edges = False
     mutex_uvs, mutex_weights = grid_graph.compute_nh_and_weights(
-        np.require(affinities.data[ndim:], requirements="C"),
+        lr_affs,
         offsets[ndim:],
         [1] * ndim,
         randomize_strides=False,
