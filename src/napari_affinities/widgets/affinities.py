@@ -1,7 +1,7 @@
 # local package imports
 from copy import deepcopy
 from ..gp.pipeline import GunpowderParameters, build_pipeline
-from .gui_helpers import layer_choice_widget
+from .gui_helpers import layer_choice_widget, MplCanvas
 from ..bioimageio.helpers import get_torch_module
 
 # github repo libraries
@@ -10,7 +10,6 @@ import gunpowder as gp
 # pip installed libraries
 import napari
 from napari.qt.threading import thread_worker
-from magicgui.widgets import create_widget, Container, Label
 import bioimageio.core
 from bioimageio.core.build_spec import build_model
 from bioimageio.core.resource_io.nodes import Model
@@ -19,6 +18,11 @@ from marshmallow import missing
 import torch
 import numpy as np
 from xarray import DataArray
+
+# widget stuff
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.figure import Figure
+from magicgui.widgets import create_widget, Container, Label
 from superqt import QCollapsible
 from qtpy.QtWidgets import (
     QWidget,
@@ -75,23 +79,15 @@ class ModelWidget(QWidget):
         )  # FunctionGui -> QWidget via .native
 
         # add loss/iterations widget
-        iterations_frame = QFrame(collapsable_train_widget)
-        iterations_layout = QHBoxLayout()
-        iterations_label = QLabel("iterations:")
-        self.iterations_widget = QLabel("None")
-        iterations_layout.addWidget(iterations_label)
-        iterations_layout.addWidget(self.iterations_widget)
-        iterations_frame.setLayout(iterations_layout)
-        collapsable_train_widget.addWidget(iterations_frame)
-
-        loss_frame = QFrame(collapsable_train_widget)
-        loss_layout = QHBoxLayout()
-        loss_label = QLabel("loss:")
-        self.loss_widget = QLabel("nan")
-        loss_layout.addWidget(loss_label)
-        loss_layout.addWidget(self.loss_widget)
-        loss_frame.setLayout(loss_layout)
-        collapsable_train_widget.addWidget(loss_frame)
+        self.progress_plot = MplCanvas(self, width=5, height=3, dpi=100)
+        toolbar = NavigationToolbar(self.progress_plot, self)
+        progress_plot_layout = QVBoxLayout()
+        progress_plot_layout.addWidget(toolbar)
+        progress_plot_layout.addWidget(self.progress_plot)
+        self.loss_plot = None
+        plot_container_widget = QWidget()
+        plot_container_widget.setLayout(progress_plot_layout)
+        collapsable_train_widget.addWidget(plot_container_widget)
 
         # add buttons
         self.train_button = QPushButton("Train!", self)
@@ -231,8 +227,20 @@ class ModelWidget(QWidget):
         self.__training_generator = None
         if not keep_stats:
             self.iteration = 0
-            self.iterations_widget.setText("None")
-            self.loss_widget.setText("nan")
+            self.__iterations = []
+            self.__losses = []
+            if self.loss_plot is None:
+                self.loss_plot = self.progress_plot.axes.plot(
+                    self.__iterations, self.__losses
+                )[0]
+            self.update_progress_plot()
+
+    def update_progress_plot(self):
+        self.loss_plot.set_xdata(self.__iterations)
+        self.loss_plot.set_ydata(self.__losses)
+        self.progress_plot.axes.relim()
+        self.progress_plot.axes.autoscale_view()
+        self.progress_plot.draw()
 
     def disable_buttons(
         self,
@@ -695,8 +703,9 @@ class ModelWidget(QWidget):
             self.add_layers(layers)
         if iteration is not None and loss is not None:
             self.iteration = iteration
-            self.iterations_widget.setText(f"{iteration}")
-            self.loss_widget.setText(f"{loss}")
+            self.__iterations.append(iteration)
+            self.__losses.append(loss)
+            self.update_progress_plot()
 
     def on_return(self, weights_path: Path):
         """
@@ -974,13 +983,13 @@ class ModelWidget(QWidget):
                             )
                         mode = yield (
                             iteration,
-                            loss,
+                            loss.detach().cpu().item(),
                             *arrays,
                             *snapshot_arrays,
                             *pred_arrays,
                         )
                     else:
-                        mode = yield (iteration, loss)
+                        mode = yield (iteration, loss.detach().cpu().item())
                 elif mode == "stop":
                     checkpoint = Path(f"/tmp/checkpoints/{iteration}.pt")
                     if not checkpoint.parent.exists():
