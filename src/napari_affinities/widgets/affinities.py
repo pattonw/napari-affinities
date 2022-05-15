@@ -104,7 +104,7 @@ class ModelWidget(QWidget):
         layout.addWidget(collapsable_train_widget)
 
         # add advanced dropdown
-        advanced_options = QCollapsible("Advanced: expand for options:", self)
+        advanced_options = QCollapsible("Training(Advanced): expand for options:", self)
         self.advanced_widget = self.create_advanced_widget(napari_viewer)
         advanced_options.addWidget(
             self.advanced_widget.native
