@@ -174,22 +174,22 @@ class ModelWidget(QWidget):
     @property
     def training_parameters(self) -> GunpowderParameters:
         parameters = GunpowderParameters(
-            self.advanced_widget.lsd_sigma.value,
-            self.advanced_widget.scale_min.value,
-            self.advanced_widget.scale_max.value,
-            self.advanced_widget.shift_min.value,
-            self.advanced_widget.shift_max.value,
-            self.advanced_widget.noise_mean.value,
-            self.advanced_widget.noise_var.value,
-            self.advanced_widget.elastic_control_spacing.value,
-            self.advanced_widget.elastic_control_sigma.value,
-            self.advanced_widget.zoom_min.value,
-            self.advanced_widget.zoom_max.value,
-            self.advanced_widget.rotation.value,
-            self.advanced_widget.mirror.value,
-            self.advanced_widget.transpose.value,
-            self.advanced_widget.num_cpus.value,
-            self.advanced_widget.batch_size.value,
+            self.advanced_widget.lsds.lsd_sigma.value,
+            self.advanced_widget.intensities.scale_min.value,
+            self.advanced_widget.intensities.scale_max.value,
+            self.advanced_widget.intensities.shift_min.value,
+            self.advanced_widget.intensities.shift_max.value,
+            self.advanced_widget.intensities.noise_mean.value,
+            self.advanced_widget.intensities.noise_var.value,
+            self.advanced_widget.spatial.elastic_control_spacing.value,
+            self.advanced_widget.spatial.elastic_control_sigma.value,
+            self.advanced_widget.spatial.zoom_min.value,
+            self.advanced_widget.spatial.zoom_max.value,
+            self.advanced_widget.spatial.rotation.value,
+            self.advanced_widget.spatial.mirror.value,
+            self.advanced_widget.spatial.transpose.value,
+            self.advanced_widget.training.num_cpus.value,
+            self.advanced_widget.training.batch_size.value,
         )
         return parameters
 
@@ -540,12 +540,8 @@ class ModelWidget(QWidget):
 
     def create_advanced_widget(self, viewer):
         # inputs:
-        lsd_label = Label(
-            name="lsd_label",
-            label='<a href="https://localshapedescriptors.github.io"><font color=white>LSDs</font></a>',
-        )
         lsd_sigma = create_widget(
-            annotation=int, name="lsd_sigma", label="LSD sigma", value=3
+            annotation=int, name="lsd_sigma", label="sigma", value=3
         )
         scale_min = create_widget(
             annotation=float,
@@ -628,28 +624,50 @@ class ModelWidget(QWidget):
         batch_size = create_widget(
             annotation=int, name="batch_size", label="Batch Size", value=1
         )
+        containers = [
+            Container(
+                name="lsds",
+                label='<a href="https://localshapedescriptors.github.io"><font color=white>LSDs</font></a>',
+                widgets=[
+                    lsd_sigma,
+                ],
+            ),
+            Container(
+                name="intensities",
+                label="Intensity Augmentations",
+                widgets=[
+                    scale_min,
+                    scale_max,
+                    shift_min,
+                    shift_max,
+                    noise_mean,
+                    noise_var,
+                ],
+            ),
+            Container(
+                name="spatial",
+                label="Spatial Augmentations",
+                widgets=[
+                    elastic_control_spacing,
+                    elastic_control_sigma,
+                    zoom_min,
+                    zoom_max,
+                    rotation,
+                    mirror,
+                    transpose,
+                ],
+            ),
+            Container(
+                name="training",
+                label="Training Parameters",
+                widgets=[
+                    num_cpus,
+                    batch_size,
+                ],
+            ),
+        ]
 
-        advanced_widget = Container(
-            widgets=[
-                lsd_label,
-                lsd_sigma,
-                scale_min,
-                scale_max,
-                shift_min,
-                shift_max,
-                noise_mean,
-                noise_var,
-                elastic_control_spacing,
-                elastic_control_sigma,
-                zoom_min,
-                zoom_max,
-                rotation,
-                mirror,
-                transpose,
-                num_cpus,
-                batch_size,
-            ]
-        )
+        advanced_widget = Container(widgets=containers)
         return advanced_widget
 
     def create_predict_widget(self, viewer):
