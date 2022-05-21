@@ -124,11 +124,25 @@ class PipelineDataGenerator:
 def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters):
 
     outputs = model.outputs
-    output_names = [output.name.lower() for output in outputs]
+    metadata_output_names = [output.name.lower() for output in outputs]
+    output_names = [x for x in metadata_output_names]
+    if "affinities" not in output_names:
+        output_names[0] = "affinities"
+        if len(output_names) > 1:
+            output_names[1] = "fgbg"
+        if len(output_names) > 2:
+            output_names[2] = "lsds"
+        if len(output_names) > 3:
+            raise ValueError(
+                f"Don't know how to handle outputs: {metadata_output_names}"
+            )
     try:
         affs_index = output_names.index("affinities")
     except ValueError as e:
-        raise ValueError('This model does not provide an output with name "affinities"')
+        raise ValueError(
+            'This model does not provide an output with name "affinities"! '
+            f"{model.name} only provides: {output_names}"
+        )
     try:
         lsd_index = output_names.index("lsds")
         lsds = True

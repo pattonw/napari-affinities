@@ -320,12 +320,24 @@ class ModelWidget(QWidget):
         """
 
         outputs = self.model.outputs
-        output_names = [output.name.lower() for output in outputs]
+        metadata_output_names = [output.name.lower() for output in outputs]
+        output_names = [x for x in metadata_output_names]
+        if "affinities" not in output_names:
+            output_names[0] = "affinities"
+            if len(output_names) > 1:
+                output_names[1] = "fgbg"
+            if len(output_names) > 2:
+                output_names[2] = "lsds"
+            if len(output_names) > 3:
+                raise ValueError(
+                    f"Don't know how to handle outputs: {metadata_output_names}"
+                )
         try:
             affs_index = output_names.index("affinities")
         except ValueError as e:
             raise ValueError(
-                'This model does not provide an output with name "affinities"'
+                'This model does not provide an output with name "affinities"! '
+                f"{self.model.name} only provides: {output_names}"
             )
         try:
             lsd_index = output_names.index("lsds")
@@ -398,12 +410,24 @@ class ModelWidget(QWidget):
         ndim = len(offsets[0])
 
         outputs = model.outputs
-        output_names = [output.name.lower() for output in outputs]
+        metadata_output_names = [output.name.lower() for output in outputs]
+        output_names = [x for x in metadata_output_names]
+        if "affinities" not in output_names:
+            output_names[0] = "affinities"
+            if len(output_names) > 1:
+                output_names[1] = "fgbg"
+            if len(output_names) > 2:
+                output_names[2] = "lsds"
+            if len(output_names) > 3:
+                raise ValueError(
+                    f"Don't know how to handle outputs: {metadata_output_names}"
+                )
         try:
             affs_index = output_names.index("affinities")
         except ValueError as e:
             raise ValueError(
-                'This model does not provide an output with name "affinities"'
+                'This model does not provide an output with name "affinities"! '
+                f"{self.model.name} only provides: {output_names}"
             )
         try:
             lsd_index = output_names.index("lsds")
@@ -429,6 +453,16 @@ class ModelWidget(QWidget):
         with create_prediction_pipeline(bioimageio_model=model) as pp:
             # [0] to access first input array/output array
             pred_data = DataArray(raw_data, dims=tuple(pp.input_specs[0].axes))
+            pred_data = pred_data.pad(
+                pad_width={
+                    dim: (
+                        0,
+                        (-len(pred_data[dim]))
+                        % max(1, pp.input_specs[0].shape.step[i]),
+                    )
+                    for i, dim in enumerate(pp.input_specs[0].axes)
+                }
+            )
             outputs = list(pp(pred_data))
 
         affs = outputs[affs_index].values
@@ -455,7 +489,7 @@ class ModelWidget(QWidget):
         assert (
             affs.ndim == ndim + 1
         ), f"Affs have dims: {affs.ndim}, but expected: {ndim+1}"
-        assert affs.shape[0] == len(offsets), (
+        assert affs.shape[0] == len(offsets) or affs.shape[0] == len(offsets) + 1, (
             f"Number of affinity channels ({affs.shape[0]}) "
             f"does not match number of offsets ({len(offsets)})"
         )
@@ -832,12 +866,24 @@ class ModelWidget(QWidget):
         model = deepcopy(self.model)
 
         outputs = model.outputs
-        output_names = [output.name.lower() for output in outputs]
+        metadata_output_names = [output.name.lower() for output in outputs]
+        output_names = [x for x in metadata_output_names]
+        if "affinities" not in output_names:
+            output_names[0] = "affinities"
+            if len(output_names) > 1:
+                output_names[1] = "fgbg"
+            if len(output_names) > 2:
+                output_names[2] = "lsds"
+            if len(output_names) > 3:
+                raise ValueError(
+                    f"Don't know how to handle outputs: {metadata_output_names}"
+                )
         try:
             affs_index = output_names.index("affinities")
         except ValueError as e:
             raise ValueError(
-                'This model does not provide an output with name "affinities"'
+                'This model does not provide an output with name "affinities"! '
+                f"{self.model.name} only provides: {output_names}"
             )
         try:
             lsd_index = output_names.index("lsds")
