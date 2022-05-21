@@ -1,5 +1,11 @@
 from pytest import param
-from .nodes import NapariImageSource, NapariLabelsSource, OnesSource, Binarize
+from .nodes import (
+    NapariImageSource,
+    NapariLabelsSource,
+    OnesSource,
+    Binarize,
+    NpArraySource,
+)
 
 import gunpowder as gp
 from lsd.gp import AddLocalShapeDescriptor
@@ -44,13 +50,17 @@ class PipelineDataGenerator:
     def __init__(
         self,
         pipeline: gp.Pipeline,
+        val_pipeline: gp.Pipeline,
         request: gp.BatchRequest,
+        val_request: gp.BatchRequest,
         snapshot_request: gp.BatchRequest,
         keys: List[Tuple[gp.ArrayKey, str]],
         axes: List[str],
     ):
         self.pipeline = pipeline
+        self.val_pipeline = val_pipeline
         self.request = request
+        self.val_request = val_request
         self.snapshot_request = snapshot_request
         self.keys = keys
         self.spatial_axes = axes
@@ -85,6 +95,29 @@ class PipelineDataGenerator:
                     snapshot_arrays.append(layer)
 
         return arrays, snapshot_arrays
+
+    def next_validation(self) -> List[Tuple[np.ndarray, Dict[str, Any], LayerType]]:
+        request = gp.BatchRequest()
+        request_template = self.val_request
+        for k, v in request_template.items():
+            request[k] = v
+        batch = self.val_pipeline.request_batch(request)
+
+        arrays = []
+        for key, layer_type in self.keys:
+            if key in request_template:
+                layer = (
+                    batch[key].data,
+                    {
+                        "name": f"sample_{key}".lower(),
+                        "axes": ("batch", "channel", *self.spatial_axes),
+                    },
+                    layer_type,
+                )
+                if key in self.request:
+                    arrays.append(layer)
+
+        return arrays
 
 
 @contextmanager
@@ -121,6 +154,7 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
     # witch to world units:
     input_size = voxel_size * input_shape
     output_size = voxel_size * output_shape
+    context = (input_size - output_size) / 2
 
     # padding of groundtruth/mask
     # without padding you random sampling won't be uniform over the whole volume
@@ -136,32 +170,55 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
     lsd_mask_key = gp.ArrayKey("LSD_MASK")
     fgbg_key = gp.ArrayKey("FGBG")
     fgbg_mask_key = gp.ArrayKey("FGBG_MASK")
+    training_mask_key = gp.ArrayKey("TRAINING_MASK_KEY")
 
     # Get source nodes:
     raw_source = NapariImageSource(raw, raw_key)
+    val_raw_source = NapariImageSource(raw, raw_key)
     # Pad raw infinitely with 0s. This is to avoid failing to train on any of
     # the ground truth because there wasn't enough raw context.
     raw_source += gp.Pad(raw_key, None, 0)
+    val_raw_source += gp.Pad(raw_key, None, 0)
 
     gt_source = NapariLabelsSource(gt, gt_key)
+    val_gt_source = NapariLabelsSource(gt, gt_key)
+    with gp.build(val_gt_source):
+        val_roi = gp.Roi(val_gt_source.spec[gt_key].roi.get_offset(), output_size)
+        total_roi = val_gt_source.spec[gt_key].roi.copy()
+        training_mask_spec = val_gt_source.spec[gt_key].copy()
+
+    shape = total_roi.get_shape() / voxel_size
+    training_mask = np.ones(shape, dtype=training_mask_spec.dtype)
+    val_slices = [slice(0, val_shape) for val_shape in val_roi.get_shape() / voxel_size]
+    training_mask[tuple(val_slices)] = 0
+
+    training_mask_source = NpArraySource(
+        training_mask, training_mask_spec, training_mask_key
+    )
 
     if mask is not None:
         mask_source = NapariLabelsSource(mask, mask_key)
+        val_mask_source = NapariLabelsSource(mask, mask_key)
     else:
         with gp.build(gt_source):
             mask_spec = gt_source.spec[gt_key]
             mask_spec.dtype = bool
             mask_source = OnesSource(gt_source.spec[gt_key], mask_key)
+            val_mask_source = OnesSource(gt_source.spec[gt_key].copy(), mask_key)
 
     # Pad gt/mask with just enough to make sure random sampling is uniform
     gt_source += gp.Pad(gt_key, padding, 0)
+    val_gt_source += gp.Pad(gt_key, padding, 0)
     mask_source += gp.Pad(mask_key, padding, 0)
+    val_mask_source += gp.Pad(mask_key, padding, 0)
 
+    val_pipeline = (val_raw_source, val_gt_source, val_mask_source) + gp.MergeProvider()
     pipeline = (
-        (raw_source, gt_source, mask_source) + gp.MergeProvider() + gp.RandomLocation()
+        (raw_source, gt_source, mask_source, training_mask_source)
+        + gp.MergeProvider()
+        + gp.RandomLocation(min_masked=1, mask=training_mask_key)
     )
 
-    # TODO: add augments
     if parameters.mirror or parameters.transpose:
         pipeline += gp.SimpleAugment(
             mirror_only=[1 if parameters.mirror else 0 for _ in range(dims)],
@@ -187,8 +244,22 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
         labels_mask=mask_key,
         affinities_mask=affinity_mask_key,
     )
+    val_pipeline += gp.AddAffinities(
+        offsets,
+        gt_key,
+        affinity_key,
+        labels_mask=mask_key,
+        affinities_mask=affinity_mask_key,
+    )
+
     if lsds:
         pipeline += AddLocalShapeDescriptor(
+            gt_key,
+            lsd_key,
+            mask=lsd_mask_key,
+            sigma=parameters.lsd_sigma,
+        )
+        val_pipeline += AddLocalShapeDescriptor(
             gt_key,
             lsd_key,
             mask=lsd_mask_key,
@@ -199,6 +270,10 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
             gt_key,
             fgbg_key,
         )
+        val_pipeline += Binarize(
+            gt_key,
+            fgbg_key,
+        )
 
     # Trainer attributes:
     if parameters.num_cpu_processes > 1:
@@ -206,22 +281,37 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
 
     # add channel dimensions
     pipeline += gp.Unsqueeze([raw_key, gt_key, mask_key])
+    val_pipeline += gp.Unsqueeze([raw_key, gt_key, mask_key])
     if fgbg:
         pipeline += gp.Unsqueeze([fgbg_key])
+        val_pipeline += gp.Unsqueeze([fgbg_key])
 
     # stack to create a batch dimension
     pipeline += gp.Stack(parameters.batch_size)
+    val_pipeline += gp.Stack(1)
 
     request = gp.BatchRequest()
     request.add(raw_key, input_size)
     request.add(affinity_key, output_size)
     request.add(affinity_mask_key, output_size)
+    request.add(training_mask_key, output_size)
     if lsds:
         request.add(lsd_key, output_size)
         request.add(lsd_mask_key, output_size)
     if fgbg:
         request.add(fgbg_key, output_size)
         request.add(mask_key, output_size)
+
+    val_request = gp.BatchRequest()
+    val_request[raw_key] = gp.ArraySpec(roi=val_roi.grow(context, context))
+    val_request[affinity_key] = gp.ArraySpec(roi=val_roi)
+    val_request[affinity_mask_key] = gp.ArraySpec(roi=val_roi)
+    if lsds:
+        val_request[lsd_key] = gp.ArraySpec(roi=val_roi)
+        val_request[lsd_mask_key] = gp.ArraySpec(roi=val_roi)
+    if fgbg:
+        val_request[fgbg_key] = gp.ArraySpec(roi=val_roi)
+        val_request[mask_key] = gp.ArraySpec(roi=val_roi)
 
     snapshot_request = gp.BatchRequest()
     snapshot_request.add(raw_key, input_size)
@@ -247,6 +337,13 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
     ]
 
     with gp.build(pipeline):
-        yield PipelineDataGenerator(
-            pipeline, request, snapshot_request, keys, axes=spatial_axes
-        )
+        with gp.build(val_pipeline):
+            yield PipelineDataGenerator(
+                pipeline,
+                val_pipeline,
+                request,
+                val_request,
+                snapshot_request,
+                keys,
+                axes=spatial_axes,
+            )

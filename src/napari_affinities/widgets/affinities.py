@@ -53,6 +53,8 @@ class ModelWidget(QWidget):
 
         # supported axes
         self.__axes = ["batch", "channel", "time", "z", "y", "x"]
+        self._validation_interval = 100
+        self.__model = None
 
         # Widget layout
         layout = QVBoxLayout()
@@ -85,6 +87,7 @@ class ModelWidget(QWidget):
         progress_plot_layout.addWidget(toolbar)
         progress_plot_layout.addWidget(self.progress_plot)
         self.loss_plot = None
+        self.val_plot = None
         plot_container_widget = QWidget()
         plot_container_widget.setLayout(progress_plot_layout)
         collapsable_train_widget.addWidget(plot_container_widget)
@@ -229,18 +232,41 @@ class ModelWidget(QWidget):
             self.iteration = 0
             self.__iterations = []
             self.__losses = []
+            self.__val_iterations = []
+            self.__val_losses = []
             if self.loss_plot is None:
                 self.loss_plot = self.progress_plot.axes.plot(
-                    self.__iterations, self.__losses
+                    self.__iterations, self.__losses, label="Training Loss"
                 )[0]
+                self.val_plot = self.progress_plot.axes.plot(
+                    self.__val_iterations, self.__val_losses, label="Validation Loss"
+                )[0]
+                self.progress_plot.axes.legend()
+                if self.model is not None:
+                    self.progress_plot.axes.set_title(
+                        f"{self.model.name} Training Progress"
+                    )
+                else:
+                    self.progress_plot.axes.set_title(f"Training Progress")
+                self.progress_plot.axes.set_xlabel("Iterations")
+                self.progress_plot.axes.set_ylabel("Loss")
             self.update_progress_plot()
 
     def update_progress_plot(self):
         self.loss_plot.set_xdata(self.__iterations)
         self.loss_plot.set_ydata(self.__losses)
+        self.val_plot.set_xdata(self.__val_iterations)
+        self.val_plot.set_ydata(self.__val_losses)
         self.progress_plot.axes.relim()
         self.progress_plot.axes.autoscale_view()
-        self.progress_plot.draw()
+        try:
+            self.progress_plot.draw()
+        except np.linalg.LinAlgError as e:
+            # matplotlib seems to throw a LinAlgError on draw sometimes. Not sure
+            # why yet. Seems to only happen when initializing models without any
+            # layers loaded. No idea whats going wrong.
+            # For now just avoid drawing. Seems to work as soon as there is data to plot
+            pass
 
     def disable_buttons(
         self,
@@ -716,13 +742,16 @@ class ModelWidget(QWidget):
             self.model = bioimageio.core.load_resource_description(url)
 
     def on_yield(self, step_data):
-        iteration, loss, *layers = step_data
+        iteration, loss, val_loss, *layers = step_data
         if len(layers) > 0:
             self.add_layers(layers)
         if iteration is not None and loss is not None:
             self.iteration = iteration
             self.__iterations.append(iteration)
             self.__losses.append(loss)
+            if val_loss is not None:
+                self.__val_iterations.append(iteration)
+                self.__val_losses.append(val_loss)
             self.update_progress_plot()
 
     def on_return(self, weights_path: Path):
@@ -848,8 +877,7 @@ class ModelWidget(QWidget):
 
         # Train loop:
         with self.build_pipeline(raw, gt, mask, parameters) as pipeline:
-            loss = float("nan")
-            mode = yield (iteration, loss)
+            mode = yield (None, None, None)
             while True:
 
                 if mode == "predict":
@@ -915,6 +943,50 @@ class ModelWidget(QWidget):
                     mode = yield (None, None, *prediction_layers)
                 elif mode is None or mode == "snapshot":
                     snapshot_iteration = mode == "snapshot"
+                    val_loss = None
+
+                    if iteration % self._validation_interval == 0:
+                        val_arrays = pipeline.next_validation()
+                        val_tensors = [
+                            torch.as_tensor(array, device=device).float()
+                            for array, _, _ in val_arrays
+                        ]
+                        (
+                            val_raw,
+                            val_aff_target,
+                            val_aff_mask,
+                            *val_optional_arrays,
+                        ) = val_tensors
+                        if lsds:
+                            (
+                                val_lsd_target,
+                                val_lsd_mask,
+                                *val_optional_arrays,
+                            ) = val_optional_arrays
+                        if fgbg:
+                            val_fgbg_target, val_fgbg_mask = val_optional_arrays
+                        val_outputs = tuple(torch_module(val_raw))
+
+                        val_affs_loss = aff_loss_func(
+                            val_outputs[affs_index] * val_aff_mask,
+                            val_aff_target * val_aff_mask,
+                        )
+
+                        val_losses = [val_affs_loss]
+                        if lsds:
+                            val_lsd_loss = lsd_loss_func(
+                                val_outputs[lsd_index] * val_lsd_mask,
+                                val_lsd_target * val_lsd_mask,
+                            )
+                            val_losses.append(val_lsd_loss)
+                        if fgbg:
+                            val_fgbg_loss = fgbg_loss_func(
+                                val_outputs[fgbg_index] * val_fgbg_mask,
+                                val_fgbg_target * val_fgbg_mask,
+                            )
+                            val_losses.append(val_fgbg_loss)
+
+                        val_loss = sum(val_losses)
 
                     # fetch data:
                     arrays, snapshot_arrays = pipeline.next(snapshot_iteration)
@@ -934,7 +1006,6 @@ class ModelWidget(QWidget):
                         aff_target * aff_mask,
                     )
 
-                    optimizer.zero_grad()
                     losses = [affs_loss]
                     if lsds:
                         lsd_loss = lsd_loss_func(
@@ -949,8 +1020,10 @@ class ModelWidget(QWidget):
 
                     loss = sum(losses)
 
+                    optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
+
                     iteration += 1
 
                     if snapshot_iteration:
@@ -1002,12 +1075,21 @@ class ModelWidget(QWidget):
                         mode = yield (
                             iteration,
                             loss.detach().cpu().item(),
+                            val_loss.detach().cpu().item()
+                            if val_loss is not None
+                            else None,
                             *arrays,
                             *snapshot_arrays,
                             *pred_arrays,
                         )
                     else:
-                        mode = yield (iteration, loss.detach().cpu().item())
+                        mode = yield (
+                            iteration,
+                            loss.detach().cpu().item(),
+                            val_loss.detach().cpu().item()
+                            if val_loss is not None
+                            else None,
+                        )
                 elif mode == "stop":
                     checkpoint = Path(f"/tmp/checkpoints/{iteration}.pt")
                     if not checkpoint.parent.exists():
