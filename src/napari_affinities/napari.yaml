@@ -11,10 +11,16 @@ contributions:
     - id: napari-affinities.sample_epithelial
       python_name: napari_affinities.sample_data:sample_epithelial
       title: Load sample data from napari Affinities
+    - id: napari-affinities.sample_lightsheet
+      python_name: napari_affinities.sample_data:sample_lightsheet
+      title: Load sample data from napari Affinities
   sample_data:
     - command: napari-affinities.sample_epithelial
       display_name: Epithelial sample
       key: epithelial_sample.0
+    - command: napari-affinities.sample_lightsheet
+      display_name: Lightsheet sample
+      key: lightsheet_sample.0
   widgets:
     - command: napari-affinities.make_mutex_watershed_widget
       display_name: Mutex Watershed Widget

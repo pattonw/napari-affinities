@@ -1,6 +1,7 @@
 import zarr
 
 EPITHELIAL_ZARR = "sample_data/per01_100.zarr"
+LIGHTSHEET_ZARR = "sample_data/lightsheet_nuclei.zarr"
 
 
 def sample_epithelial():
@@ -33,5 +34,18 @@ def sample_epithelial():
                 "name": "FG/BG",
             },
             "labels",
+        ),
+    ]
+
+
+def sample_lightsheet():
+    container = zarr.open(LIGHTSHEET_ZARR, "r")
+    return [
+        (
+            container["volumes/raw"][200:286, 200:400, 400:600] / 255,
+            {
+                "name": "Raw",
+            },
+            "image",
         ),
     ]
