@@ -42,7 +42,7 @@ def sample_lightsheet():
     container = zarr.open(LIGHTSHEET_ZARR, "r")
     return [
         (
-            container["volumes/raw"][200:286, 200:400, 400:600] / 255,
+            container["volumes/raw"][:] / 255,
             {
                 "name": "Raw",
             },
