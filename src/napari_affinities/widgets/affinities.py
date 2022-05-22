@@ -14,6 +14,7 @@ import bioimageio.core
 from bioimageio.core.build_spec import build_model
 from bioimageio.core.resource_io.nodes import Model
 from bioimageio.core.prediction_pipeline import create_prediction_pipeline
+from bioimageio.core.prediction import predict_with_tiling
 from marshmallow import missing
 import torch
 import numpy as np
@@ -453,17 +454,7 @@ class ModelWidget(QWidget):
         with create_prediction_pipeline(bioimageio_model=model) as pp:
             # [0] to access first input array/output array
             pred_data = DataArray(raw_data, dims=tuple(pp.input_specs[0].axes))
-            pred_data = pred_data.pad(
-                pad_width={
-                    dim: (
-                        0,
-                        (-len(pred_data[dim]))
-                        % max(1, pp.input_specs[0].shape.step[i]),
-                    )
-                    for i, dim in enumerate(pp.input_specs[0].axes)
-                }
-            )
-            outputs = list(pp(pred_data))
+            outputs = list(predict_with_tiling(pp, pred_data, True))
 
         affs = outputs[affs_index].values
 
