@@ -21,7 +21,6 @@ import math
 LayerName = str
 LayerType = str
 
-
 @dataclass
 class GunpowderParameters:
     lsd_sigma: int = 5

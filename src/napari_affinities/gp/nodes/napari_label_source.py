@@ -46,8 +46,22 @@ class NapariLabelsSource(gp.BatchProvider):
 
     def _read_metadata(self, labels):
         # offset assumed to be in world coordinates
-        offset = gp.Coordinate(labels.metadata.get("offset", (1, 1)))
-        voxel_size = gp.Coordinate(labels.metadata.get("resolution", (1, 1)))
+        # TODO: read from metadata
+        data_shape = labels.data.shape
+        # strip leading singleton dimensions (2D data is often given a leading singleton 3rd dimension)
+        while data_shape[0] == 1:
+            data_shape = data_shape[1:]
+        axes = labels.metadata.get("axes")
+        if axes is not None:
+            ndims = len(axes)
+            assert ndims <= len(
+                data_shape
+            ), f"{axes} incompatible with shape: {data_shape}"
+        else:
+            ndims = len(data_shape)
+
+        offset = gp.Coordinate(labels.metadata.get("offset", (0,) * ndims))
+        voxel_size = gp.Coordinate(labels.metadata.get("resolution", (1,) * ndims))
         shape = gp.Coordinate(labels.data.shape[-offset.dims() :])
 
         return gp.ArraySpec(

@@ -126,7 +126,7 @@ class ModelWidget(QWidget):
 
         # add buttons
         self.predict_button = QPushButton("Predict!", self)
-        self.predict_button.clicked.connect(self.predict)
+        self.predict_button.clicked.connect(self.predict_worker)
         collapsable_predict_widget.addWidget(self.predict_button)
 
         layout.addWidget(collapsable_predict_widget)
@@ -314,6 +314,13 @@ class ModelWidget(QWidget):
     def spatial_dims(self, ndims):
         return ["time", "z", "y", "x"][-ndims:]
 
+    def predict_worker(self):
+        predict_worker = self.predict()
+        predict_worker.start()
+        predict_worker.returned.connect(self.add_layers)
+        
+
+    @thread_worker
     def predict(self):
         """
         Predict on data provided through the predict widget. Not necessarily the
@@ -405,7 +412,7 @@ class ModelWidget(QWidget):
                     "image",
                 ),
             )
-        self.add_layers(prediction_layers)
+        return prediction_layers
 
     def _predict(self, model, raw_data, offsets):
         ndim = len(offsets[0])
@@ -454,7 +461,7 @@ class ModelWidget(QWidget):
         with create_prediction_pipeline(bioimageio_model=model) as pp:
             # [0] to access first input array/output array
             pred_data = DataArray(raw_data, dims=tuple(pp.input_specs[0].axes))
-            outputs = list(predict_with_tiling(pp, pred_data, True))
+            outputs = list(predict_with_tiling(pp, pred_data, True, verbose=True))
 
         affs = outputs[affs_index].values
 
@@ -977,7 +984,7 @@ class ModelWidget(QWidget):
                                 "image",
                             ),
                         )
-                    mode = yield (None, None, *prediction_layers)
+                    mode = yield (None, None, None, *prediction_layers)
                 elif mode is None or mode == "snapshot":
                     snapshot_iteration = mode == "snapshot"
                     val_loss = None
