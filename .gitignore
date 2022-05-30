@@ -83,4 +83,4 @@ venv/
 # written by setuptools_scm
 **/_version.py
 
-sample_data/models
+sample_data
