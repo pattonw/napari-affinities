@@ -330,6 +330,7 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
     snapshot_request.add(raw_key, input_size)
     snapshot_request.add(affinity_key, output_size)
     snapshot_request.add(affinity_mask_key, output_size)
+    snapshot_request.add(training_mask_key, output_size)
     if lsds:
         snapshot_request.add(lsd_key, output_size)
         snapshot_request.add(lsd_mask_key, output_size)
