@@ -46,6 +46,13 @@ Download example model:
 [epithelial example model](https://oc.embl.de/index.php/s/zfWMKu7HoQnSJLs)
 Place the downloaded zip file in "sample_data/models"
 
+## Use
+
+Requirements for the model:
+1) Bioimageio packaged pytorch model
+2) Outputs with names "affinities", "fgbg"(optional) or "lsds"(optional)
+    - if these names are not used, it will be assumed that the outputs are affinities, fgbg, then lsds in that order
+
 
 ## Contributing
 
