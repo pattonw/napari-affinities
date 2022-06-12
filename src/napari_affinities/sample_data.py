@@ -1,7 +1,9 @@
 import zarr
+import h5py
+
 
 EPITHELIAL_ZARR = "sample_data/per01_100.zarr"
-LIGHTSHEET_ZARR = "sample_data/lightsheet_nuclei.zarr"
+LIGHTSHEET_H5 = "sample_data/lightsheet_nuclei_test_data"
 
 
 def sample_epithelial():
@@ -11,6 +13,7 @@ def sample_epithelial():
             container["volumes/raw"][:],
             {
                 "name": "Raw",
+                "metadata": {"axes": ["y", "x"]},
             },
             "image",
         ),
@@ -18,6 +21,7 @@ def sample_epithelial():
             container["volumes/gt_labels"][:],
             {
                 "name": "Labels",
+                "metadata": {"axes": ["y", "x"]},
             },
             "labels",
         ),
@@ -25,6 +29,7 @@ def sample_epithelial():
             container["volumes/gt_tanh"][:],
             {
                 "name": "TanH",
+                "metadata": {"axes": ["y", "x"]},
             },
             "image",
         ),
@@ -32,6 +37,7 @@ def sample_epithelial():
             container["volumes/gt_fgbg"][:],
             {
                 "name": "FG/BG",
+                "metadata": {"axes": ["y", "x"]},
             },
             "labels",
         ),
@@ -39,13 +45,22 @@ def sample_epithelial():
 
 
 def sample_lightsheet():
-    container = zarr.open(LIGHTSHEET_ZARR, "r")
+    container = h5py.File(LIGHTSHEET_H5)
     return [
         (
-            container["volumes/raw"][:] / 255,
+            container["raw"][100:260, 200:360, 400:560] / 255,
             {
                 "name": "Raw",
+                "metadata": {"axes": ["z", "y", "x"]},
             },
             "image",
+        ),
+        (
+            container["seg"],
+            {
+                "name": "Segmentation",
+                "metadata": {"axes": ["z", "y", "x"]},
+            },
+            "labels",
         ),
     ]
