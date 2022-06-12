@@ -1,4 +1,3 @@
-from pytest import param
 from .nodes import (
     NapariImageSource,
     NapariLabelsSource,
