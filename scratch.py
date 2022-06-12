@@ -2,6 +2,9 @@ from src.napari_affinities.widgets.affinities import ModelWidget
 
 import napari
 
+import logging
+
+# logging.basicConfig(level=logging.DEBUG)
 
 viewer = napari.Viewer()
 widget = ModelWidget(viewer)

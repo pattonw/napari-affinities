@@ -38,7 +38,6 @@ Install torch according to your system [(follow the instructions here)](https://
 Then install all requirements:
 
     conda install -c conda-forge affogato
-    pip install cython # this must be installed before the requirements.txt
     pip install -r requirements.txt
 
 

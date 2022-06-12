@@ -11,6 +11,7 @@ def sample_epithelial():
             container["volumes/raw"][:],
             {
                 "name": "Raw",
+                "metadata": {"axes": ["y", "x"]},
             },
             "image",
         ),
@@ -18,6 +19,7 @@ def sample_epithelial():
             container["volumes/gt_labels"][:],
             {
                 "name": "Labels",
+                "metadata": {"axes": ["y", "x"]},
             },
             "labels",
         ),
@@ -25,6 +27,7 @@ def sample_epithelial():
             container["volumes/gt_tanh"][:],
             {
                 "name": "TanH",
+                "metadata": {"axes": ["y", "x"]},
             },
             "image",
         ),
@@ -32,6 +35,7 @@ def sample_epithelial():
             container["volumes/gt_fgbg"][:],
             {
                 "name": "FG/BG",
+                "metadata": {"axes": ["y", "x"]},
             },
             "labels",
         ),
@@ -42,10 +46,19 @@ def sample_lightsheet():
     container = zarr.open(LIGHTSHEET_ZARR, "r")
     return [
         (
-            container["volumes/raw"][:] / 255,
+            container["volumes/raw"][100:260, 200:360, 400:560] / 255,
             {
                 "name": "Raw",
+                "metadata": {"axes": ["z", "y", "x"]},
             },
             "image",
+        ),
+        (
+            container["volumes/seg"][:],
+            {
+                "name": "Segmentation",
+                "metadata": {"axes": ["z", "y", "x"]},
+            },
+            "labels",
         ),
     ]
