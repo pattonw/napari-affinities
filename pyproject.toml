@@ -3,7 +3,7 @@ requires = ["setuptools>=42.0.0", "wheel", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
-write_to = "src/{{cookiecutter.module_name}}/_version.py"
+write_to = "src/napari_affinities/_version.py"
 
 [tool.black]
 line-length = 79
