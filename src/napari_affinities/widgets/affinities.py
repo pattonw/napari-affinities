@@ -1012,7 +1012,7 @@ class ModelWidget(QWidget):
                         val_outputs = tuple(torch_module(val_raw))
 
                         val_affs_loss = aff_loss_func(
-                            val_outputs[affs_index] * val_aff_mask,
+                            val_outputs[affs_index][-len(offsets) :] * val_aff_mask,
                             val_aff_target * val_aff_mask,
                         )
 
@@ -1034,6 +1034,7 @@ class ModelWidget(QWidget):
 
                     # fetch data:
                     arrays, snapshot_arrays = pipeline.next(snapshot_iteration)
+
                     tensors = [
                         torch.as_tensor(array, device=device).float()
                         for array, _, _ in arrays
@@ -1046,7 +1047,7 @@ class ModelWidget(QWidget):
                     outputs = tuple(torch_module(raw))
 
                     affs_loss = aff_loss_func(
-                        outputs[affs_index] * aff_mask,
+                        outputs[affs_index][-len(offsets) :] * aff_mask,
                         aff_target * aff_mask,
                     )
 
