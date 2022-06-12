@@ -2,14 +2,8 @@
 # Requirements of your napari plugin should be listed in setup.cfg
 # See also: https://caremad.io/posts/2013/07/setup-vs-requirement/
 
-napari[all]
-zarr
 pytest
+pytest-cov
 pytest-qt
-npe2
-magicgui
-git+https://github.com/funkey/gunpowder@patch-1.2.3
-bioimageio.core
-git+https://github.com/pattonw/lsd.git@no-convenience-imports
-matplotlib
--e .
+black
+mypy

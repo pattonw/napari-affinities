@@ -23,22 +23,25 @@ https://napari.org/plugins/stable/index.html
 
 ## Installation
 
+Pre-requisites:
+
+    1) Install lsds with: `pip install git+https://github.com/pattonw/lsd.git@no-convenience-imports` (This is necessary since we need lsds but the package name `lsd` is already taken on pypi. While we resolve this the specific lsd version needs to be specified)
+
 You can install `napari-affinities` via [pip]:
 
-    pip install napari-affinities
+    `pip install napari-affinities`
 
 To install latest development version :
 
-    pip install git+https://github.com/pattonw/napari-affinities.git
+    `pip install git+https://github.com/pattonw/napari-affinities.git`
 
 Install torch according to your system [(follow the instructions here)](https://pytorch.org/get-started/locally/). For example with cuda 10.2 available, run:
 
     conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
 
-Then install all requirements:
+Install conda requirements:
 
     conda install -c conda-forge affogato
-    pip install -r requirements.txt
 
 ### Download example model:
 
