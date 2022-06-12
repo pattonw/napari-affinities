@@ -54,6 +54,13 @@ Unpack the tar file into test data (`lightsheet_nuclei_test_data` (an hdf5 file)
 Move the data into sample_data which will enable you to load the "Lightsheet Sample" data in napari.
 Place the model zip file anywhere you want. You can open it in the plugin with the "load from file" button.
 
+##### Workarounds to be fixed:
+
+1. you need to update the `rdf.yaml` in the `LightsheetNucleusSegmentation.zip` with the following:
+   - "shape" for "input0" should be updated with a larger minimum input size and "output0" should be updated with a larger halo. If not fixed, there will be significant tiling artifacts.
+   - (Optional) "output0" should be renamed to affinities. The plugin supports multiple outputs and relies on names for figuring out which one is which. If unrecognized names are provided we assume the outputs are ordered (affinities, fgbg, lsds) but this is less reliable than explicit names.
+2. This model also generates foreground in the same array as affinities, i.e. a 10 channel output `(fgbg, [-1, 0, 0], [0, -1, 0], [0, 0, -1], [-2, 0, 0], ...)`. Although predictions will work, post processing such as mutex watershed will break unless you manually separate the first channel.
+
 ## Use
 
 Requirements for the model:
