@@ -910,7 +910,10 @@ class ModelWidget(QWidget):
         optimizer = torch.optim.Adam(params=torch_module.parameters())
 
         # TODO: How to display profiling stats
-        device = torch.device("cuda")
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
         torch_module = torch_module.to(device)
         torch_module.train()
 
