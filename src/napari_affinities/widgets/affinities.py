@@ -458,7 +458,7 @@ class ModelWidget(QWidget):
         while len(raw_data.shape) < ndim + 2:
             raw_data = raw_data.reshape((1, *raw_data.shape))
 
-        with create_prediction_pipeline(bioimageio_model=model) as pp:
+        with create_prediction_pipeline(bioimageio_model=model, devices=["cuda"]) as pp:
             # [0] to access first input array/output array
             pred_data = DataArray(raw_data, dims=tuple(pp.input_specs[0].axes))
             outputs = list(predict_with_tiling(pp, pred_data, True, verbose=True))
