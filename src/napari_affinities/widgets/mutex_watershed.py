@@ -28,12 +28,9 @@ def mutex_watershed_widget(
     shape = affinities.data.shape[1:]
     if seeds is not None:
         assert (
-            seeds.data.shape[0] == 1
-        ), "Seeds should only have 1 channel but has multiple!"
-        assert (
             shape == seeds.data.shape[1:]
         ), f"Got shape {seeds.data.shape[1:]} for seeds but expected {shape}"
-        seeds = seeds.data
+        seeds = seeds.data[0:1]
     if mask is not None:
         assert (
             mask.data.shape[0] == 1
