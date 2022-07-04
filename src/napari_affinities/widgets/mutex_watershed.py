@@ -12,9 +12,11 @@ from magicgui import magic_factory, widgets
 import napari
 from napari.qt.threading import FunctionWorker, thread_worker
 
+
 def add_interactive_callback(widget, interactive_callbacks):
     def callback(e):
         if e is not None:
+
             def change(*args, **kwargs):
                 # this sets off the auto run
                 widget.toggle.value = 1 - widget.toggle.value
@@ -24,7 +26,6 @@ def add_interactive_callback(widget, interactive_callbacks):
                 old_cb = interactive_callbacks.pop()
                 e.events.set_data.disconnect(cb)
             print(callback)
-            
 
     return callback
 
@@ -48,6 +49,8 @@ def mutex_watershed_widget(
     invert_affinities: bool,
     toggle: int = 1,
 ) -> FunctionWorker[LayerDataTuple]:
+    if affinities is None or "offsets" not in affinities.metadata:
+        raise ValueError("Please provide affinities with offset metadata!")
     assert "offsets" in affinities.metadata, f"{affinities.metadata}"
     offsets = affinities.metadata["offsets"]
     affs = affinities.data
@@ -119,4 +122,3 @@ def mutex_watershed_widget(
         )
 
     return async_mutex_watershed(seeds.data if seeds is not None else None)
-
