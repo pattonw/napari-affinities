@@ -102,8 +102,8 @@ def mutex_watershed_widget(
         mutex_uvs, mutex_weights = grid_graph.compute_nh_and_weights(
             lr_affs,
             offsets[ndim:],
-            [1] * ndim,
-            randomize_strides=False,
+            [4] * ndim,
+            randomize_strides=True,
         )
 
         # compute the segmentation
