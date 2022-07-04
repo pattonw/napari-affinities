@@ -46,7 +46,6 @@ def mutex_watershed_widget(
     affinities: Image,
     seeds: Optional[Labels],
     mask: Optional[Labels],
-    invert_affinities: bool,
     toggle: int = 1,
 ) -> FunctionWorker[LayerDataTuple]:
     if affinities is None or "offsets" not in affinities.metadata:
@@ -54,6 +53,7 @@ def mutex_watershed_widget(
     assert "offsets" in affinities.metadata, f"{affinities.metadata}"
     offsets = affinities.metadata["offsets"]
     affs = affinities.data
+    invert_affinities = affinities.metadata.get("high_inter_label", False)
 
     @thread_worker(connect={"returned": lambda: print("Done!")})
     def async_mutex_watershed(seeds: LabelsData) -> LayerDataTuple:

@@ -21,7 +21,9 @@ import numpy as np
 from xarray import DataArray
 
 # widget stuff
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qt5agg import (
+    NavigationToolbar2QT as NavigationToolbar,
+)
 from matplotlib.figure import Figure
 from magicgui.widgets import create_widget, Container, Label
 from superqt import QCollapsible
@@ -75,7 +77,9 @@ class ModelWidget(QWidget):
         layout.addWidget(model_url_loader)
 
         # Train widget(Collapsable)
-        collapsable_train_widget = QCollapsible("Training: expand for options:", self)
+        collapsable_train_widget = QCollapsible(
+            "Training: expand for options:", self
+        )
         self.train_widget = self.create_train_widget(napari_viewer)
         collapsable_train_widget.addWidget(
             self.train_widget.native
@@ -104,7 +108,9 @@ class ModelWidget(QWidget):
         layout.addWidget(collapsable_train_widget)
 
         # add advanced dropdown
-        advanced_options = QCollapsible("Training(Advanced): expand for options:", self)
+        advanced_options = QCollapsible(
+            "Training(Advanced): expand for options:", self
+        )
         self.advanced_widget = self.create_advanced_widget(napari_viewer)
         advanced_options.addWidget(
             self.advanced_widget.native
@@ -132,7 +138,9 @@ class ModelWidget(QWidget):
         layout.addWidget(collapsable_predict_widget)
 
         # Save widget(Collapsable)
-        collapsable_save_widget = QCollapsible("Save Model: expand for options:", self)
+        collapsable_save_widget = QCollapsible(
+            "Save Model: expand for options:", self
+        )
         self.save_widget = self.create_save_widget(napari_viewer)
         collapsable_save_widget.addWidget(self.save_widget.native)
 
@@ -240,7 +248,9 @@ class ModelWidget(QWidget):
                     self.__iterations, self.__losses, label="Training Loss"
                 )[0]
                 self.val_plot = self.progress_plot.axes.plot(
-                    self.__val_iterations, self.__val_losses, label="Validation Loss"
+                    self.__val_iterations,
+                    self.__val_losses,
+                    label="Validation Loss",
                 )[0]
                 self.progress_plot.axes.legend()
                 if self.model is not None:
@@ -318,7 +328,6 @@ class ModelWidget(QWidget):
         predict_worker = self.predict()
         predict_worker.start()
         predict_worker.returned.connect(self.add_layers)
-        
 
     @thread_worker
     def predict(self):
@@ -370,7 +379,12 @@ class ModelWidget(QWidget):
                 predictions[affs_index],
                 {
                     "name": "Affinities",
-                    "metadata": {"offsets": offsets},
+                    "metadata": {
+                        "offsets": offsets,
+                        "high_inter_label": self.model.config.get(
+                            "affs_high_inter_label", False
+                        ),
+                    },
                     "axes": (
                         "channel",
                         *spatial_axes,
@@ -458,10 +472,14 @@ class ModelWidget(QWidget):
         while len(raw_data.shape) < ndim + 2:
             raw_data = raw_data.reshape((1, *raw_data.shape))
 
-        with create_prediction_pipeline(bioimageio_model=model, devices=["cuda"]) as pp:
+        with create_prediction_pipeline(
+            bioimageio_model=model, devices=["cuda"]
+        ) as pp:
             # [0] to access first input array/output array
             pred_data = DataArray(raw_data, dims=tuple(pp.input_specs[0].axes))
-            outputs = list(predict_with_tiling(pp, pred_data, True, verbose=True))
+            outputs = list(
+                predict_with_tiling(pp, pred_data, True, verbose=True)
+            )
 
         affs = outputs[affs_index].values
 
@@ -487,7 +505,9 @@ class ModelWidget(QWidget):
         assert (
             affs.ndim == ndim + 1
         ), f"Affs have dims: {affs.ndim}, but expected: {ndim+1}"
-        assert affs.shape[0] == len(offsets) or affs.shape[0] == len(offsets) + 1, (
+        assert (
+            affs.shape[0] == len(offsets) or affs.shape[0] == len(offsets) + 1
+        ), (
             f"Number of affinity channels ({affs.shape[0]}) "
             f"does not match number of offsets ({len(offsets)})"
         )
@@ -501,8 +521,12 @@ class ModelWidget(QWidget):
 
         # get architecture source
         def get_architecture_source():
-            raw_resource = bioimageio.core.load_raw_resource_description(self.__rdf)
-            model_source = raw_resource.weights["pytorch_state_dict"].architecture
+            raw_resource = bioimageio.core.load_raw_resource_description(
+                self.__rdf
+            )
+            model_source = raw_resource.weights[
+                "pytorch_state_dict"
+            ].architecture
             # download the source file if necessary
             source_file = bioimageio.core.resource_io.utils.resolve_source(
                 model_source.source_file
@@ -522,18 +546,28 @@ class ModelWidget(QWidget):
         assert zip_path.name.endswith(".zip"), "Must save model in a zip"
 
         preprocessing = [
-            [{"name": prep.name, "kwargs": prep.kwargs} for prep in inp.preprocessing]
+            [
+                {"name": prep.name, "kwargs": prep.kwargs}
+                for prep in inp.preprocessing
+            ]
             for inp in self.model.inputs
             if inp.preprocessing != missing
         ]
         postprocessing = [
-            [{"name": post.name, "kwargs": post.kwargs} for post in outp.postprocessing]
+            [
+                {"name": post.name, "kwargs": post.kwargs}
+                for post in outp.postprocessing
+            ]
             if outp.postprocessing != missing
             else None
             for outp in self.model.outputs
         ]
         citations = [
-            {k: v for k, v in dataclasses.asdict(citation).items() if v != missing}
+            {
+                k: v
+                for k, v in dataclasses.asdict(citation).items()
+                if v != missing
+            }
             for citation in self.model.cite
         ]
         authors = [dataclasses.asdict(author) for author in self.model.authors]
@@ -587,7 +621,9 @@ class ModelWidget(QWidget):
             annotation=napari.layers.Image,
             name="raw",
         )
-        gt = layer_choice_widget(viewer, annotation=napari.layers.Labels, name="gt")
+        gt = layer_choice_widget(
+            viewer, annotation=napari.layers.Labels, name="gt"
+        )
         mask = layer_choice_widget(
             viewer, annotation=Optional[napari.layers.Labels], name="mask"
         )
@@ -839,7 +875,9 @@ class ModelWidget(QWidget):
                     layer.data = np.concatenate(
                         [
                             layer.data.reshape(-1, *data.shape),
-                            data.reshape(-1, *data.shape).astype(layer.data.dtype),
+                            data.reshape(-1, *data.shape).astype(
+                                layer.data.dtype
+                            ),
                         ],
                         axis=0,
                     )
@@ -853,13 +891,17 @@ class ModelWidget(QWidget):
                 if layer_type == "image":
                     self.viewer.add_image(data, name=name, **metadata)
                 elif layer_type == "labels":
-                    self.viewer.add_labels(data.astype(int), name=name, **metadata)
+                    self.viewer.add_labels(
+                        data.astype(int), name=name, **metadata
+                    )
 
     @thread_worker
     def train_affinities(self, raw, gt, mask, parameters, iteration=0):
 
         if self.model is None:
-            raise ValueError("Please load a model either from your filesystem or a url")
+            raise ValueError(
+                "Please load a model either from your filesystem or a url"
+            )
 
         model = deepcopy(self.model)
 
@@ -940,7 +982,9 @@ class ModelWidget(QWidget):
                     # TODO: How to determine axes of raw data. metadata?
                     # guess? simply make it fit what the model expects?
 
-                    predictions = tuple(self._predict(model, raw_data, offsets))
+                    predictions = tuple(
+                        self._predict(model, raw_data, offsets)
+                    )
 
                     # Generate affinities and keep the offsets as metadata
                     prediction_layers = [
@@ -1011,11 +1055,15 @@ class ModelWidget(QWidget):
                                 *val_optional_arrays,
                             ) = val_optional_arrays
                         if fgbg:
-                            val_fgbg_target, val_fgbg_mask = val_optional_arrays
+                            (
+                                val_fgbg_target,
+                                val_fgbg_mask,
+                            ) = val_optional_arrays
                         val_outputs = tuple(torch_module(val_raw))
 
                         val_affs_loss = aff_loss_func(
-                            val_outputs[affs_index][-len(offsets) :] * val_aff_mask,
+                            val_outputs[affs_index][-len(offsets) :]
+                            * val_aff_mask,
                             val_aff_target * val_aff_mask,
                         )
 
@@ -1044,7 +1092,11 @@ class ModelWidget(QWidget):
                     ]
                     raw, aff_target, aff_mask, *optional_arrays = tensors
                     if lsds:
-                        lsd_target, lsd_mask, *optional_arrays = optional_arrays
+                        (
+                            lsd_target,
+                            lsd_mask,
+                            *optional_arrays,
+                        ) = optional_arrays
                     if fgbg:
                         fgbg_target, fgbg_mask = optional_arrays
                     outputs = tuple(torch_module(raw))
@@ -1057,12 +1109,14 @@ class ModelWidget(QWidget):
                     losses = [affs_loss]
                     if lsds:
                         lsd_loss = lsd_loss_func(
-                            outputs[lsd_index] * lsd_mask, lsd_target * lsd_mask
+                            outputs[lsd_index] * lsd_mask,
+                            lsd_target * lsd_mask,
                         )
                         losses.append(lsd_loss)
                     if fgbg:
                         fgbg_loss = fgbg_loss_func(
-                            outputs[fgbg_index] * fgbg_mask, fgbg_target * fgbg_mask
+                            outputs[fgbg_index] * fgbg_mask,
+                            fgbg_target * fgbg_mask,
                         )
                         losses.append(fgbg_loss)
 
