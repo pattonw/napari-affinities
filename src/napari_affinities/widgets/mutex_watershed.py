@@ -25,7 +25,6 @@ def add_interactive_callback(widget, interactive_callbacks):
             while len(interactive_callbacks) > 0:
                 old_cb = interactive_callbacks.pop()
                 e.events.set_data.disconnect(cb)
-            print(callback)
 
     return callback
 
@@ -55,7 +54,7 @@ def mutex_watershed_widget(
     affs = affinities.data
     invert_affinities = affinities.metadata.get("high_inter_label", False)
 
-    @thread_worker(connect={"returned": lambda: print("Done!")})
+    @thread_worker(connect={"returned": lambda: None})
     def async_mutex_watershed(seeds: LabelsData) -> LayerDataTuple:
         shape = affs.shape[1:]
         if seeds is not None:
