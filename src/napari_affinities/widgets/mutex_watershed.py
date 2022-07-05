@@ -1,3 +1,4 @@
+from matplotlib import interactive
 import napari
 from napari.types import LabelsData, LayerDataTuple
 from napari.layers import Labels, Image
@@ -12,20 +13,40 @@ from magicgui import magic_factory, widgets
 import napari
 from napari.qt.threading import FunctionWorker, thread_worker
 
+def toggle_interactivity_callback(widget, interactive_callbacks):
+    def callback(live):
+        # remove old callbacks
+        seed_layer = widget.seeds.value
+        while len(interactive_callbacks) > 0:
+            old_cb = interactive_callbacks.pop()
+            seed_layer.events.set_data.disconnect(old_cb)
+        if live:
+            # add callback for seed_layer change
+            if seed_layer is not None:
+                def change(*args, **kwargs):
+                    # this sets off the auto run
+                    widget.toggle.value = 1 - widget.toggle.value
+
+                cb = seed_layer.events.set_data.connect(change)
+                interactive_callbacks.append(cb)
+    return callback
 
 def add_interactive_callback(widget, interactive_callbacks):
-    def callback(e):
-        if e is not None:
+    def callback(seed_layer):
+        if seed_layer is not None:
 
             def change(*args, **kwargs):
                 # this sets off the auto run
                 widget.toggle.value = 1 - widget.toggle.value
 
-            cb = e.events.set_data.connect(change)
+            # remove old callbacks
             while len(interactive_callbacks) > 0:
                 old_cb = interactive_callbacks.pop()
-                e.events.set_data.disconnect(cb)
-
+                seed_layer.events.set_data.disconnect(old_cb)
+            if widget.live.value:
+                # add new callback
+                cb = seed_layer.events.set_data.connect(change)
+                interactive_callbacks.append(cb)
     return callback
 
 
@@ -34,17 +55,22 @@ def init(widget):
     widget.seeds.changed.connect(
         add_interactive_callback(widget, interactive_callbacks)
     )
+    widget.live.changed.connect(
+        toggle_interactivity_callback(widget, interactive_callbacks)
+    )
 
 
 @magic_factory(
     toggle={"visible": False},
     auto_call=True,
     widget_init=init,
+    call_button=True,
 )
 def mutex_watershed_widget(
     affinities: Image,
     seeds: Optional[Labels],
     mask: Optional[Labels],
+    live: bool = False,
     toggle: int = 1,
 ) -> FunctionWorker[LayerDataTuple]:
     if affinities is None or "offsets" not in affinities.metadata:
