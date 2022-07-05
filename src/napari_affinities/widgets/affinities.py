@@ -229,8 +229,17 @@ class ModelWidget(QWidget):
             self.disable_buttons(snapshot=True, async_predict=True)
 
     @contextmanager
-    def build_pipeline(self, raw, gt, mask, parameters: GunpowderParameters):
-        with build_pipeline(raw, gt, mask, self.model, parameters) as pipeline:
+    def build_pipeline(
+        self,
+        raw,
+        gt,
+        mask,
+        parameters: GunpowderParameters,
+        affs_high_inter_object: bool = False,
+    ):
+        with build_pipeline(
+            raw, gt, mask, self.model, parameters, affs_high_inter_object
+        ) as pipeline:
             yield pipeline
 
     def reset_training_state(self, keep_stats=False):
@@ -300,6 +309,9 @@ class ModelWidget(QWidget):
             self.train_widget.mask.value,
             self.training_parameters,
             iteration=self.iteration,
+            affs_high_inter_object=self.model.config.get(
+                "affs_high_inter_label", False
+            ),
         )
         self.__training_generator.yielded.connect(self.on_yield)
         self.__training_generator.returned.connect(self.on_return)
@@ -634,28 +646,32 @@ class ModelWidget(QWidget):
 
     def create_advanced_widget(self, viewer):
         # inputs:
+        default_parameters = GunpowderParameters()
         lsd_sigma = create_widget(
-            annotation=int, name="lsd_sigma", label="sigma", value=3
+            annotation=int,
+            name="lsd_sigma",
+            label="sigma",
+            value=default_parameters.lsd_sigma,
         )
         scale_min = create_widget(
             annotation=float,
             name="scale_min",
             label="Scale min",
-            value=0.5,
+            value=default_parameters.intensity_scale_min,
             options={"min": 0},
         )
         scale_max = create_widget(
             annotation=float,
             name="scale_max",
             label="Scale max",
-            value=2.0,
+            value=default_parameters.intensity_scale_max,
             options={"min": 0},
         )
         shift_min = create_widget(
             annotation=float,
             name="shift_min",
             label="Shift min",
-            value=-0.5,
+            value=default_parameters.intensity_shift_min,
             options={
                 "min": -1,
                 "max": 1,
@@ -665,58 +681,79 @@ class ModelWidget(QWidget):
             annotation=float,
             name="shift_max",
             label="Shift max",
-            value=0.5,
+            value=default_parameters.intensity_shift_max,
             options={
                 "min": -1,
                 "max": 1,
             },
         )
         noise_mean = create_widget(
-            annotation=float, name="noise_mean", label="Noise mean", value=0.0
+            annotation=float,
+            name="noise_mean",
+            label="Noise mean",
+            value=default_parameters.gausian_noise_mean,
         )
         noise_var = create_widget(
-            annotation=float, name="noise_var", label="Noise var", value=0.5
+            annotation=float,
+            name="noise_var",
+            label="Noise var",
+            value=default_parameters.gausian_noise_var,
         )
         elastic_control_spacing = create_widget(
             annotation=int,
             name="elastic_control_spacing",
             label="Elastic control spacing",
-            value=50,
+            value=default_parameters.elastic_control_point_spacing,
         )
         elastic_control_sigma = create_widget(
             annotation=int,
             name="elastic_control_sigma",
             label="Elastic control sigma",
-            value=10,
+            value=default_parameters.elastic_control_point_sigma,
         )
         zoom_min = create_widget(
             annotation=float,
             name="zoom_min",
             label="Zoom min",
-            value=0.8,
+            value=default_parameters.zoom_min,
             options={"min": 0},
         )
         zoom_max = create_widget(
             annotation=float,
             name="zoom_max",
             label="Zoom max",
-            value=1.2,
+            value=default_parameters.zoom_max,
             options={"min": 0},
         )
         rotation = create_widget(
-            annotation=bool, name="rotation", label="Rotation", value=True
+            annotation=bool,
+            name="rotation",
+            label="Rotation",
+            value=default_parameters.rotation,
         )
         mirror = create_widget(
-            annotation=bool, name="mirror", label="Mirror", value=True
+            annotation=bool,
+            name="mirror",
+            label="Mirror",
+            value=default_parameters.mirror,
         )
         transpose = create_widget(
-            annotation=bool, name="transpose", label="Transpose", value=True
+            annotation=bool,
+            name="transpose",
+            label="Transpose",
+            value=default_parameters.transpose,
         )
         num_cpus = create_widget(
-            annotation=int, name="num_cpus", label="Num CPUs", value=1
+            annotation=int,
+            name="num_cpus",
+            label="Num CPUs",
+            value=default_parameters.num_cpu_processes,
         )
         batch_size = create_widget(
-            annotation=int, name="batch_size", label="Batch Size", value=1
+            annotation=int,
+            name="batch_size",
+            label="Batch Size",
+            value=default_parameters.batch_size,
         )
         containers = [
             Container(
@@ -896,7 +933,15 @@ class ModelWidget(QWidget):
                     )
 
     @thread_worker
-    def train_affinities(self, raw, gt, mask, parameters, iteration=0):
+    def train_affinities(
+        self,
+        raw,
+        gt,
+        mask,
+        parameters,
+        iteration=0,
+        affs_high_inter_object: bool = False,
+    ):
 
         if self.model is None:
             raise ValueError(
@@ -947,7 +992,7 @@ class ModelWidget(QWidget):
         # define Loss function and Optimizer TODO: make options available as choices?
         lsd_loss_func = torch.nn.MSELoss()
         # aff_loss_func = torch.nn.BCEWithLogitsLoss()
-        aff_loss_func = torch.nn.MSELoss()
+        aff_loss_func = torch.nn.BCELoss()
         fgbg_loss_func = torch.nn.MSELoss()  # TODO: add support for DiceLoss
         optimizer = torch.optim.Adam(params=torch_module.parameters())
 
@@ -965,7 +1010,9 @@ class ModelWidget(QWidget):
         raw_data = raw_data.reshape((1, *raw_data.shape))
 
         # Train loop:
-        with self.build_pipeline(raw, gt, mask, parameters) as pipeline:
+        with self.build_pipeline(
+            raw, gt, mask, parameters, affs_high_inter_object
+        ) as pipeline:
             mode = yield (None, None, None)
             while True:
 

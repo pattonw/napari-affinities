@@ -119,7 +119,14 @@ class PipelineDataGenerator:
 
 
 @contextmanager
-def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters):
+def build_pipeline(
+    raw,
+    gt,
+    mask,
+    model: Model,
+    parameters: GunpowderParameters,
+    affs_high_inter_object: bool = False,
+):
 
     outputs = model.outputs
     metadata_output_names = [output.name.lower() for output in outputs]
@@ -170,7 +177,9 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
 
     # padding of groundtruth/mask
     # without padding you random sampling won't be uniform over the whole volume
-    padding = output_size  # TODO: add sampling for extra lsd/affinities context
+    padding = (
+        output_size  # TODO: add sampling for extra lsd/affinities context
+    )
 
     # define keys:
     raw_key = gp.ArrayKey("RAW")
@@ -195,13 +204,17 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
     gt_source = NapariLabelsSource(gt, gt_key)
     val_gt_source = NapariLabelsSource(gt, gt_key)
     with gp.build(val_gt_source):
-        val_roi = gp.Roi(val_gt_source.spec[gt_key].roi.get_offset(), output_size)
+        val_roi = gp.Roi(
+            val_gt_source.spec[gt_key].roi.get_offset(), output_size
+        )
         total_roi = val_gt_source.spec[gt_key].roi.copy()
         training_mask_spec = val_gt_source.spec[gt_key].copy()
 
     shape = total_roi.get_shape() / voxel_size
     training_mask = np.ones(shape, dtype=training_mask_spec.dtype)
-    val_slices = [slice(0, val_shape) for val_shape in val_roi.get_shape() / voxel_size]
+    val_slices = [
+        slice(0, val_shape) for val_shape in val_roi.get_shape() / voxel_size
+    ]
     training_mask[tuple(val_slices)] = 0
 
     training_mask_source = NpArraySource(
@@ -216,7 +229,9 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
             mask_spec = gt_source.spec[gt_key]
             mask_spec.dtype = bool
             mask_source = OnesSource(gt_source.spec[gt_key], mask_key)
-            val_mask_source = OnesSource(gt_source.spec[gt_key].copy(), mask_key)
+            val_mask_source = OnesSource(
+                gt_source.spec[gt_key].copy(), mask_key
+            )
 
     # Pad gt/mask with just enough to make sure random sampling is uniform
     gt_source += gp.Pad(gt_key, padding, 0)
@@ -224,7 +239,11 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
     mask_source += gp.Pad(mask_key, padding, 0)
     val_mask_source += gp.Pad(mask_key, padding, 0)
 
-    val_pipeline = (val_raw_source, val_gt_source, val_mask_source) + gp.MergeProvider()
+    val_pipeline = (
+        val_raw_source,
+        val_gt_source,
+        val_mask_source,
+    ) + gp.MergeProvider()
     pipeline = (
         (raw_source, gt_source, mask_source, training_mask_source)
         + gp.MergeProvider()
@@ -234,18 +253,24 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
     if parameters.mirror or parameters.transpose:
         pipeline += gp.SimpleAugment(
             mirror_only=[1 if parameters.mirror else 0 for _ in range(dims)],
-            transpose_only=[1 if parameters.transpose else 0 for _ in range(dims)],
+            transpose_only=[
+                1 if parameters.transpose else 0 for _ in range(dims)
+            ],
         )
     pipeline += gp.ElasticAugment(
         control_point_spacing=[
             parameters.elastic_control_point_spacing for _ in range(dims)
         ],
-        jitter_sigma=[parameters.elastic_control_point_sigma for _ in range(dims)],
+        jitter_sigma=[
+            parameters.elastic_control_point_sigma for _ in range(dims)
+        ],
         rotation_interval=(0, 2 * math.pi if parameters.rotation else 0),
         scale_interval=(parameters.zoom_min, parameters.zoom_max),
     )
     pipeline += gp.NoiseAugment(
-        raw_key, mean=parameters.gausian_noise_mean, var=parameters.gausian_noise_var
+        raw_key,
+        mean=parameters.gausian_noise_mean,
+        var=parameters.gausian_noise_var,
     )
 
     # Generate Affinities
@@ -255,6 +280,7 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
         affinity_key,
         labels_mask=mask_key,
         affinities_mask=affinity_mask_key,
+        dtype=np.int16,
     )
     val_pipeline += gp.AddAffinities(
         offsets,
@@ -262,7 +288,11 @@ def build_pipeline(raw, gt, mask, model: Model, parameters: GunpowderParameters)
         affinity_key,
         labels_mask=mask_key,
         affinities_mask=affinity_mask_key,
+        dtype=np.int16,
     )
+    if affs_high_inter_object:
+        pipeline += gp.IntensityScaleShift(affinity_key, -1, 1)
+        val_pipeline += gp.IntensityScaleShift(affinity_key, -1, 1)
 
     if lsds:
         pipeline += AddLocalShapeDescriptor(
