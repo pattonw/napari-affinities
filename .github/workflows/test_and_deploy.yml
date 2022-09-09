@@ -75,8 +75,7 @@ jobs:
           $CONDA/bin/python -c "import gunpowder"
 
       - name: Run test
-        run: |
-          $CONDA/bin/python -m pytest -v --color=yes
+        run: $CONDA/bin/python -m pytest -v
 
       # # this runs the platform-specific tests declared in tox.ini
       # - name: Test with tox
