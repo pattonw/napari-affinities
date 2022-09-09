@@ -20,17 +20,18 @@ import math
 LayerName = str
 LayerType = str
 
+
 @dataclass
 class GunpowderParameters:
     lsd_sigma: int = 5
-    intensity_scale_min: float = 0.5
-    intensity_scale_max: float = 2.0
-    intensity_shift_min: float = -0.5
-    intensity_shift_max: float = 0.5
+    intensity_scale_min: float = 0.8
+    intensity_scale_max: float = 1.2
+    intensity_shift_min: float = -0.2
+    intensity_shift_max: float = 0.2
     gausian_noise_mean: float = 0.0
-    gausian_noise_var: float = 0.2
+    gausian_noise_var: float = 0.02
     elastic_control_point_spacing: int = 50
-    elastic_control_point_sigma: int = 10
+    elastic_control_point_sigma: int = 0
     zoom_min: float = 0.8
     zoom_max: float = 1.2
     rotation: bool = True
@@ -94,7 +95,9 @@ class PipelineDataGenerator:
 
         return arrays, snapshot_arrays
 
-    def next_validation(self) -> List[Tuple[np.ndarray, Dict[str, Any], LayerType]]:
+    def next_validation(
+        self,
+    ) -> List[Tuple[np.ndarray, Dict[str, Any], LayerType]]:
         request = gp.BatchRequest()
         request_template = self.val_request
         for k, v in request_template.items():
