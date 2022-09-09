@@ -3,7 +3,13 @@ import napari
 from napari.types import LabelsData, LayerDataTuple
 from napari.layers import Labels, Image
 
-from affogato.segmentation import MWSGridGraph, compute_mws_clustering
+try:
+    from affogato.segmentation import MWSGridGraph, compute_mws_clustering
+except ImportError as e:
+    raise ImportError(
+        "To use mutex watershed please install affogato via: "
+        "conda install -c conda-forge affogato"
+    ) from e
 
 import numpy as np
 from typing import Optional
@@ -12,6 +18,7 @@ from magicgui import magic_factory, widgets
 
 import napari
 from napari.qt.threading import FunctionWorker, thread_worker
+
 
 def toggle_interactivity_callback(widget, interactive_callbacks):
     def callback(live):
@@ -23,13 +30,16 @@ def toggle_interactivity_callback(widget, interactive_callbacks):
         if live:
             # add callback for seed_layer change
             if seed_layer is not None:
+
                 def change(*args, **kwargs):
                     # this sets off the auto run
                     widget.toggle.value = 1 - widget.toggle.value
 
                 cb = seed_layer.events.set_data.connect(change)
                 interactive_callbacks.append(cb)
+
     return callback
+
 
 def add_interactive_callback(widget, interactive_callbacks):
     def callback(seed_layer):
@@ -47,6 +57,7 @@ def add_interactive_callback(widget, interactive_callbacks):
                 # add new callback
                 cb = seed_layer.events.set_data.connect(change)
                 interactive_callbacks.append(cb)
+
     return callback
 
 

@@ -23,10 +23,10 @@ https://napari.org/plugins/stable/index.html
 
 ## Installation
 
-Pre-requisites:
+You will need a conda environment for everything to run
+smoothly. Supported python versions are 3.7, 3.8, 3.9.
 
-    1) Install lsds with: `pip install git+https://github.com/pattonw/lsd.git@no-convenience-imports` (This is necessary since we need lsds but the package name `lsd` is already taken on pypi. While we resolve this the specific lsd version needs to be specified)
-
+### pip
 You can install `napari-affinities` via [pip]:
 
     `pip install napari-affinities`
@@ -42,6 +42,15 @@ Install torch according to your system [(follow the instructions here)](https://
 Install conda requirements:
 
     conda install -c conda-forge affogato
+
+### conda
+
+If you install via conda, there are fewer steps since
+affogato and pytorch will be installed for you.
+
+You can install `napari-affinities` via [conda]:
+
+    `conda install -c conda-forge napari-affinities`
 
 ### Download example model:
 
