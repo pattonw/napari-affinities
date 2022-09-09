@@ -4,10 +4,10 @@ from .nodes import (
     OnesSource,
     Binarize,
     NpArraySource,
+    AddLocalShapeDescriptor
 )
 
 import gunpowder as gp
-from lsd.gp import AddLocalShapeDescriptor
 
 import numpy as np
 from bioimageio.core.resource_io.nodes import Model
@@ -301,13 +301,13 @@ def build_pipeline(
         pipeline += AddLocalShapeDescriptor(
             gt_key,
             lsd_key,
-            mask=lsd_mask_key,
+            lsds_mask=lsd_mask_key,
             sigma=parameters.lsd_sigma,
         )
         val_pipeline += AddLocalShapeDescriptor(
             gt_key,
             lsd_key,
-            mask=lsd_mask_key,
+            lsds_mask=lsd_mask_key,
             sigma=parameters.lsd_sigma,
         )
     if fgbg:
