@@ -13,11 +13,17 @@ except ImportError as e:
 
 import numpy as np
 from typing import Optional
+from pathlib import Path
 
 from magicgui import magic_factory, widgets
+from qtpy.QtWidgets import QSizePolicy
 
 import napari
 from napari.qt.threading import FunctionWorker, thread_worker
+
+# STATICS
+MWS_LOGO = Path(__file__).parent.parent / "static/mws_transp.svg"
+MWS_INFO = Path(__file__).parent.parent / "static/mws_info.html"
 
 
 def toggle_interactivity_callback(widget, interactive_callbacks):
@@ -62,6 +68,13 @@ def add_interactive_callback(widget, interactive_callbacks):
 
 
 def init(widget):
+    # handle aesthetics
+    widget.label_head.value = MWS_INFO.open().read()
+    widget.label_head.native.setSizePolicy(
+        QSizePolicy.MinimumExpanding, QSizePolicy.Fixed
+    )
+
+    # handle interactivity
     interactive_callbacks = []
     widget.seeds.changed.connect(
         add_interactive_callback(widget, interactive_callbacks)
@@ -72,12 +85,17 @@ def init(widget):
 
 
 @magic_factory(
+    label_head=dict(
+        widget_type="Label",
+        label=f'<img src="{MWS_LOGO}" width="200" height="100">',
+    ),
     toggle={"visible": False},
     auto_call=True,
     widget_init=init,
     call_button=True,
 )
 def mutex_watershed_widget(
+    label_head,
     affinities: Image,
     seeds: Optional[Labels],
     mask: Optional[Labels],

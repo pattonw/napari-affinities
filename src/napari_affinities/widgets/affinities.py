@@ -3,6 +3,7 @@ from copy import deepcopy
 from ..gp.pipeline import GunpowderParameters, build_pipeline
 from .gui_helpers import layer_choice_widget, MplCanvas
 from ..bioimageio.helpers import get_torch_module
+from .fov import get_fov_data
 
 # github repo libraries
 import gunpowder as gp
@@ -382,8 +383,16 @@ class ModelWidget(QWidget):
         offsets = self.model.config["mws"]["offsets"]
         ndim = len(offsets[0])
         spatial_axes = self.spatial_dims(ndim)
+        sl = get_fov_data(
+            self.viewer,
+            self.model,
+            self.predict_widget.raw.value,
+            self.predict_widget.fov.value,
+            (["c"] if ndim < len(self.predict_widget.raw.value.data.shape) else [])
+            + spatial_axes,
+        )
         predictions = self._predict(
-            self.model, self.predict_widget.raw.value.data[:], offsets
+            self.model, self.predict_widget.raw.value.data[sl], offsets
         )
         # Generate affinities and keep the offsets as metadata
         prediction_layers = [
@@ -402,6 +411,8 @@ class ModelWidget(QWidget):
                         *spatial_axes,
                     ),
                     "overwrite": True,
+                    "slices": sl,
+                    "shape": self.predict_widget.raw.value.data.shape,
                 },
                 "image",
             ),
@@ -418,6 +429,8 @@ class ModelWidget(QWidget):
                             *spatial_axes,
                         ),
                         "overwrite": True,
+                        "slices": sl,
+                        "shape": self.predict_widget.raw.value.data.shape,
                     },
                     "image",
                 ),
@@ -434,6 +447,8 @@ class ModelWidget(QWidget):
                             *spatial_axes,
                         ),
                         "overwrite": True,
+                        "slices": sl,
+                        "shape": self.predict_widget.raw.value.data.shape,
                     },
                     "image",
                 ),
@@ -489,9 +504,12 @@ class ModelWidget(QWidget):
         ) as pp:
             # [0] to access first input array/output array
             pred_data = DataArray(raw_data, dims=tuple(pp.input_specs[0].axes))
-            outputs = list(
-                predict_with_tiling(pp, pred_data, True, verbose=True)
-            )
+            try:
+                outputs = list(
+                    predict_with_tiling(pp, pred_data, True, verbose=True)
+                )
+            except NotImplementedError as e:
+                outputs = list(pp(pred_data))
 
         affs = outputs[affs_index].values
 
@@ -808,8 +826,9 @@ class ModelWidget(QWidget):
             annotation=napari.layers.Image,
             name="raw",
         )
+        fov = create_widget(annotation=bool, value=True, name="fov")
 
-        predict_widget = Container(widgets=[raw])
+        predict_widget = Container(widgets=[raw, fov])
 
         return predict_widget
 
@@ -876,6 +895,8 @@ class ModelWidget(QWidget):
             name = metadata.pop("name")
             axes = metadata.pop("axes")
             overwrite = metadata.pop("overwrite", False)
+            slices = metadata.pop("slices", None)
+            shape = metadata.pop("shape", None)
 
             # handle viewer axes if still default numerics
             # TODO: Support using xarray axis labels as soon as napari does
@@ -901,18 +922,32 @@ class ModelWidget(QWidget):
             if batch_dim == 0:
                 data = data[0]
 
+            if slices is not None and shape is not None:
+                # strip channel dimension from slices and shape
+                slices = (slice(None, None), *slices[1:])
+                shape = (data.shape[0], *shape[1:])
+
+                # create new data array with filled in chunk
+                full_data = np.zeros(shape, dtype=data.dtype)
+                full_data[slices] = data
+
+            else:
+                slices = tuple(slice(None, None) for _ in data.shape)
+                full_data = data
+
             try:
                 # add to existing layer
                 layer = self.viewer.layers[name]
 
                 if overwrite:
-                    layer.data = data.reshape(*data.shape)
+                    layer.data[slices] = data
+                    layer.refresh()
                 else:
                     # concatenate along batch dimension
                     layer.data = np.concatenate(
                         [
-                            layer.data.reshape(-1, *data.shape),
-                            data.reshape(-1, *data.shape).astype(
+                            layer.data.reshape(-1, *full_data.shape),
+                            full_data.reshape(-1, *full_data.shape).astype(
                                 layer.data.dtype
                             ),
                         ],
@@ -926,10 +961,10 @@ class ModelWidget(QWidget):
             except KeyError:  # layer not in the viewer
                 # TODO: Support defining layer axes as soon as napari does
                 if layer_type == "image":
-                    self.viewer.add_image(data, name=name, **metadata)
+                    self.viewer.add_image(full_data, name=name, **metadata)
                 elif layer_type == "labels":
                     self.viewer.add_labels(
-                        data.astype(int), name=name, **metadata
+                        full_data.astype(int), name=name, **metadata
                     )
 
     @thread_worker
