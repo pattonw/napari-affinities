@@ -4,9 +4,9 @@ from .nodes import (
     OnesSource,
     Binarize,
     NpArraySource,
-    AddLocalShapeDescriptor
 )
 
+from lsd.gp import AddLocalShapeDescriptor
 import gunpowder as gp
 
 import numpy as np
