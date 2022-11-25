@@ -102,6 +102,14 @@ def mutex_watershed_widget(
     live: bool = False,
     toggle: int = 1,
 ) -> FunctionWorker[LayerDataTuple]:
+    """
+    live: Whether or not to update segmentation live as user modifies seeds
+    toggle: A hidden value that gets modified by the interactivity callback.
+        Changing this value leads to watershed being run due to the
+        `auto_call=True` attribute.
+    """
+
+
     if affinities is None or "offsets" not in affinities.metadata:
         raise ValueError("Please provide affinities with offset metadata!")
     assert "offsets" in affinities.metadata, f"{affinities.metadata}"
