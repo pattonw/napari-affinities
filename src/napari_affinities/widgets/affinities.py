@@ -853,8 +853,7 @@ class ModelWidget(QWidget):
             filenames = dlg.selectedFiles()
             model_file = Path(filenames[0])
 
-            self.__rdf = model_file
-            self.model = bioimageio.core.load_resource_description(model_file)
+            self.load_model(model_file)
 
     def model_from_url(self):
         # TODO: async
@@ -862,8 +861,13 @@ class ModelWidget(QWidget):
             self, "Url Input Dialog", "Url for model rdf.yaml folder:"
         )
         if ok:
-            self.__rdf = url
-            self.model = bioimageio.core.load_resource_description(url)
+            self.load_model(url)
+
+    def load_model(self, resource_description):
+        self.__rdf = resource_description
+        self.model = bioimageio.core.load_resource_description(
+            resource_description
+        )
 
     def on_yield(self, step_data):
         iteration, loss, val_loss, *layers = step_data
