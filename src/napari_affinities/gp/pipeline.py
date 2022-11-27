@@ -6,7 +6,7 @@ from .nodes import (
     NpArraySource,
 )
 
-from lsd.gp import AddLocalShapeDescriptor
+from lsd.train.gp import AddLocalShapeDescriptor
 import gunpowder as gp
 
 import numpy as np
