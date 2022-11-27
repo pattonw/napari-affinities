@@ -63,14 +63,6 @@ jobs:
       - name: Run test
         run: $CONDA/bin/python -m pytest -v
 
-      # # this runs the platform-specific tests declared in tox.ini
-      # - name: Test with tox
-      #   uses: GabrielBB/xvfb-action@v1
-      #   with:
-      #     run: tox
-      #   env:
-      #     PLATFORM: ${{ matrix.platform }}
-
       - name: Coverage
         uses: codecov/codecov-action@v2
 
